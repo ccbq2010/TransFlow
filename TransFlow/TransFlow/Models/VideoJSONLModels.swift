@@ -92,8 +92,10 @@ struct VideoJSONLContentEntry: Codable {
     let type: VideoJSONLLineType = .content
     let startTime: Double
     let endTime: Double
-    let originalText: String
-    let translatedText: String?
+    /// Mutable to support sentence-level post-editing. Timestamps remain `let`
+    /// (they're the primary key for locating the entry).
+    var originalText: String
+    var translatedText: String?
     let speakerId: String?
 
     enum CodingKeys: String, CodingKey {

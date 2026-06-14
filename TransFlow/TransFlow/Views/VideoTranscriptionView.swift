@@ -498,6 +498,16 @@ struct VideoSegmentRow: View {
     var isActive: Bool = false
     var onTap: (() -> Void)? = nil
     var onSpeakerTap: ((String) -> Void)? = nil
+    /// Sentence-level post-editing. All nil/false by default so existing call
+    /// sites (real-time transcription page) keep their read-only behavior.
+    var isEditing: Bool = false
+    var editingDraft: String? = nil
+    var onBeginEdit: (() -> Void)? = nil
+    var onDraftChange: ((String) -> Void)? = nil
+    var onCommitEdit: (() -> Void)? = nil
+    var onCancelEdit: (() -> Void)? = nil
+
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -528,11 +538,23 @@ struct VideoSegmentRow: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(segment.text)
+                    if isEditing, let draft = editingDraft {
+                        TextField("history.edit.placeholder", text: Binding(
+                            get: { draft },
+                            set: { onDraftChange?($0) }
+                        ))
                         .font(.system(size: 14))
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .lineSpacing(3)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($isFocused)
+                        .onSubmit { onCommitEdit?() }
+                        .onExitCommand { onCancelEdit?() }
+                    } else {
+                        Text(segment.text)
+                            .font(.system(size: 14))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .lineSpacing(3)
+                    }
 
                     if let translation = segment.translation, !translation.isEmpty {
                         Text(translation)
@@ -553,8 +575,20 @@ struct VideoSegmentRow: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(isActive ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
+                    .strokeBorder(
+                        isEditing ? Color.accentColor.opacity(0.5)
+                                  : (isActive ? Color.accentColor.opacity(0.3) : Color.clear),
+                        lineWidth: 1
+                    )
             )
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                onBeginEdit?()
+            }
+            .onChange(of: isEditing) { _, nowEditing in
+                if nowEditing { isFocused = true }
+            }
+            .help(Text(isEditing ? "history.edit.save_hint" : "history.edit.double_click_hint"))
         }
     }
 

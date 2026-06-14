@@ -7,7 +7,8 @@ struct VideoTranscriptionSegment: Identifiable, Sendable {
     let startTime: Double
     /// Offset from video start in seconds
     let endTime: Double
-    let text: String
+    /// Mutable to support sentence-level post-editing in history view.
+    var text: String
     var translation: String?
     /// Assigned speaker (e.g. "Speaker_1"), nil if diarization disabled
     var speakerId: String?

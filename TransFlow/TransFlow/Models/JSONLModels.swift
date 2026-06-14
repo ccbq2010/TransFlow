@@ -81,8 +81,10 @@ struct JSONLContentEntry: Codable {
     let type: JSONLLineType = .content
     let startTime: String
     let endTime: String
-    let originalText: String
-    let translatedText: String?
+    /// Mutable to support sentence-level post-editing. Timestamps remain `let`
+    /// (they're the primary key for locating the entry).
+    var originalText: String
+    var translatedText: String?
     let speakerId: String?
 
     enum CodingKeys: String, CodingKey {

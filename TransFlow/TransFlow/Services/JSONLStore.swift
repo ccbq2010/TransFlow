@@ -173,6 +173,89 @@ final class JSONLStore {
         return meta
     }
 
+    // MARK: - Editing
+
+    /// Update an existing content entry's text fields in place.
+    ///
+    /// The entry is located by its `(startTime, endTime)` pair (the de-facto primary key
+    /// since `JSONLContentEntry` has no id field). The whole file is read, the matching
+    /// line is rewritten, and the file is written back atomically. Non-content lines
+    /// (metadata, recording markers) are preserved verbatim.
+    ///
+    /// - Returns: `true` if exactly one entry was updated. `false` (with an error log)
+    ///   if zero or multiple entries matched the key.
+    @discardableResult
+    func updateEntry(
+        in url: URL,
+        matchingStartTime: String,
+        matchingEndTime: String,
+        originalText: String,
+        translatedText: String?
+    ) -> Bool {
+        let allLines = readAllLines(from: url)
+        var newLines: [String] = []
+        var matchCount = 0
+
+        for line in allLines {
+            switch line {
+            case .metadata(let meta):
+                if let encoded = encodeLine(.metadata(meta)) {
+                    newLines.append(encoded)
+                }
+            case .content(let entry):
+                let updated: JSONLContentEntry
+                if entry.startTime == matchingStartTime && entry.endTime == matchingEndTime {
+                    matchCount += 1
+                    // Only the first match is updated; subsequent matches are logged.
+                    if matchCount == 1 {
+                        updated = JSONLContentEntry(
+                            startTime: entry.startTime,
+                            endTime: entry.endTime,
+                            originalText: originalText,
+                            translatedText: translatedText,
+                            speakerId: entry.speakerId
+                        )
+                    } else {
+                        updated = entry
+                    }
+                } else {
+                    updated = entry
+                }
+                if let encoded = encodeLine(.content(updated)) {
+                    newLines.append(encoded)
+                }
+            case .recordingStart(let r):
+                if let encoded = encodeLine(.recordingStart(r)) {
+                    newLines.append(encoded)
+                }
+            case .recordingStop(let r):
+                if let encoded = encodeLine(.recordingStop(r)) {
+                    newLines.append(encoded)
+                }
+            }
+        }
+
+        guard matchCount == 1 else {
+            ErrorLogger.shared.log(
+                "updateEntry failed: matched \(matchCount) entries for startTime=\(matchingStartTime) endTime=\(matchingEndTime) (expected exactly 1)",
+                source: "JSONLStore"
+            )
+            return false
+        }
+
+        let content = newLines.joined(separator: "\n")
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            ErrorLogger.shared.log(
+                "updateEntry write failed: \(error.localizedDescription)",
+                source: "JSONLStore"
+            )
+            return false
+        }
+    }
+
     // MARK: - File Management
 
     @discardableResult

@@ -509,6 +509,12 @@ struct SessionDetailView: View {
     @State private var copyFeedback = false
     @State private var audioPlayer = SessionAudioPlayer()
 
+    /// Index of the entry currently being edited (sentence-level post-editing).
+    /// nil = not editing. Reset to nil on session load to avoid cross-session index drift.
+    @State private var editingIndex: Int?
+    /// Draft text for the entry being edited. Kept separate from `entries` so ESC can revert.
+    @State private var editingDraft: String = ""
+
     private var hasRecording: Bool { session.hasRecording }
 
     var body: some View {
@@ -553,6 +559,51 @@ struct SessionDetailView: View {
         if hasRecording {
             audioPlayer.load(allLines: allLines)
         }
+        // Cancel any in-progress edit when switching sessions.
+        editingIndex = nil
+        editingDraft = ""
+    }
+
+    // MARK: - Sentence Editing
+
+    /// Start editing an entry by index. Seeds the draft from the current text.
+    private func beginEdit(at index: Int) {
+        guard entries.indices.contains(index) else { return }
+        editingIndex = index
+        editingDraft = entries[index].originalText
+    }
+
+    /// Commit the edited draft: persist to disk and update the in-memory entry.
+    /// Empty (whitespace-only) text is rejected — the edit is cancelled instead.
+    private func commitEdit(at index: Int) {
+        guard entries.indices.contains(index) else { cancelEdit(); return }
+        let trimmed = editingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { cancelEdit(); return }
+
+        let entry = entries[index]
+        let ok = store.updateEntry(
+            in: session.url,
+            matchingStartTime: entry.startTime,
+            matchingEndTime: entry.endTime,
+            originalText: trimmed,
+            translatedText: entry.translatedText
+        )
+        if ok {
+            entries[index].originalText = trimmed
+        } else {
+            ErrorLogger.shared.log(
+                "Failed to persist entry edit at index \(index)",
+                source: "HistoryView"
+            )
+        }
+        editingIndex = nil
+        editingDraft = ""
+    }
+
+    /// Discard the current edit and revert to the stored text.
+    private func cancelEdit() {
+        editingIndex = nil
+        editingDraft = ""
     }
 
     // MARK: - Rich Preview
@@ -566,6 +617,8 @@ struct SessionDetailView: View {
                             entry: entry,
                             isActive: audioPlayer.activeEntryIndex == index,
                             hasAudioOffset: audioPlayer.entryOffset(at: index) != nil,
+                            isEditing: editingIndex == index,
+                            editingDraft: editingIndex == index ? editingDraft : nil,
                             onTimestampTap: {
                                 if audioPlayer.entryOffset(at: index) != nil {
                                     audioPlayer.seekToEntry(at: index)
@@ -573,7 +626,11 @@ struct SessionDetailView: View {
                                         audioPlayer.play()
                                     }
                                 }
-                            }
+                            },
+                            onBeginEdit: { beginEdit(at: index) },
+                            onDraftChange: { newVal in editingDraft = newVal },
+                            onCommitEdit: { commitEdit(at: index) },
+                            onCancelEdit: { cancelEdit() }
                         )
                         .id(index)
                     }
@@ -583,7 +640,7 @@ struct SessionDetailView: View {
             }
             .onChange(of: audioPlayer.activeEntryIndex) { _, newIndex in
                 if let idx = newIndex {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    withAnimation(.easeOut(duration: 0.3)) {
                         proxy.scrollTo(idx, anchor: .center)
                     }
                 }
@@ -989,6 +1046,12 @@ struct VideoSessionDetailView: View {
     @State private var videoPlayerHeight: CGFloat = 280
     @GestureState private var dragOffset: CGFloat = 0
 
+    /// Index of the segment currently being edited (sentence-level post-editing).
+    /// nil = not editing. Reset to nil on session load to avoid cross-session index drift.
+    @State private var editingIndex: Int?
+    /// Draft text for the segment being edited. Kept separate so ESC can revert.
+    @State private var editingDraft: String = ""
+
     private var sourceFileURL: URL? {
         if let path = session.originalFilePath {
             if FileManager.default.fileExists(atPath: path) {
@@ -1130,12 +1193,60 @@ struct VideoSessionDetailView: View {
             )
             playerModel.segments = segments
         }
+        // Cancel any in-progress edit when switching sessions.
+        editingIndex = nil
+        editingDraft = ""
     }
 
     // MARK: - Audio Player Header
 
     private func audioPlayerHeader(url: URL) -> some View {
         MediaPlayerBarView(playerModel: playerModel, title: session.videoFile ?? session.name)
+    }
+
+    // MARK: - Sentence Editing
+
+    /// Start editing a segment by index. Seeds the draft from the current text.
+    private func beginEdit(at index: Int) {
+        guard playerModel.segments.indices.contains(index) else { return }
+        editingIndex = index
+        editingDraft = playerModel.segments[index].text
+    }
+
+    /// Commit the edited draft: persist to disk and update both in-memory copies
+    /// (`playerModel.segments` for display, `entries` for export source-of-truth).
+    /// Empty (whitespace-only) text is rejected — the edit is cancelled instead.
+    private func commitEdit(at index: Int) {
+        guard playerModel.segments.indices.contains(index),
+              entries.indices.contains(index) else { cancelEdit(); return }
+        let trimmed = editingDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { cancelEdit(); return }
+
+        let entry = entries[index]
+        let ok = store.updateEntry(
+            in: session.url,
+            matchingStartTime: entry.startTime,
+            matchingEndTime: entry.endTime,
+            originalText: trimmed,
+            translatedText: entry.translatedText
+        )
+        if ok {
+            playerModel.segments[index].text = trimmed
+            entries[index].originalText = trimmed
+        } else {
+            ErrorLogger.shared.log(
+                "Failed to persist video entry edit at index \(index)",
+                source: "VideoHistory"
+            )
+        }
+        editingIndex = nil
+        editingDraft = ""
+    }
+
+    /// Discard the current edit and revert to the stored text.
+    private func cancelEdit() {
+        editingIndex = nil
+        editingDraft = ""
     }
 
     // MARK: - Rich Preview
@@ -1148,12 +1259,18 @@ struct VideoSessionDetailView: View {
                         VideoSegmentRow(
                             segment: segment,
                             isActive: playerModel.activeSegmentIndex == index,
+                            isEditing: editingIndex == index,
+                            editingDraft: editingIndex == index ? editingDraft : nil,
                             onTap: {
                                 playerModel.seekToSegment(at: index)
                             },
                             onSpeakerTap: { speakerId in
                                 beginSpeakerRename(speakerId)
-                            }
+                            },
+                            onBeginEdit: { beginEdit(at: index) },
+                            onDraftChange: { newVal in editingDraft = newVal },
+                            onCommitEdit: { commitEdit(at: index) },
+                            onCancelEdit: { cancelEdit() }
                         )
                         .id(index)
                     }
@@ -1163,7 +1280,7 @@ struct VideoSessionDetailView: View {
             }
             .onChange(of: playerModel.activeSegmentIndex) { _, newIndex in
                 if let idx = newIndex {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    withAnimation(.easeOut(duration: 0.3)) {
                         proxy.scrollTo(idx, anchor: .center)
                     }
                 }
@@ -1455,6 +1572,16 @@ struct EntryRowView: View {
     var isActive: Bool = false
     var hasAudioOffset: Bool = false
     var onTimestampTap: (() -> Void)? = nil
+    /// Whether this row is currently in edit mode (sentence-level post-editing).
+    var isEditing: Bool = false
+    /// Draft text when editing; nil when not editing.
+    var editingDraft: String? = nil
+    var onBeginEdit: (() -> Void)? = nil
+    var onDraftChange: ((String) -> Void)? = nil
+    var onCommitEdit: (() -> Void)? = nil
+    var onCancelEdit: (() -> Void)? = nil
+
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1487,11 +1614,23 @@ struct EntryRowView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.originalText)
+                    if isEditing, let draft = editingDraft {
+                        TextField("history.edit.placeholder", text: Binding(
+                            get: { draft },
+                            set: { onDraftChange?($0) }
+                        ))
                         .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .lineSpacing(3)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($isFocused)
+                        .onSubmit { onCommitEdit?() }
+                        .onExitCommand { onCancelEdit?() }
+                    } else {
+                        Text(entry.originalText)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                            .lineSpacing(3)
+                    }
 
                     if let translation = entry.translatedText, !translation.isEmpty {
                         Text(translation)
@@ -1512,8 +1651,21 @@ struct EntryRowView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .strokeBorder(isActive ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
+                    .strokeBorder(
+                        isEditing ? Color.accentColor.opacity(0.5)
+                                  : (isActive ? Color.accentColor.opacity(0.3) : Color.clear),
+                        lineWidth: 1
+                    )
             )
+            .contentShape(Rectangle())
+            // Double-click to start editing (macOS-native convention, like Finder rename).
+            .onTapGesture(count: 2) {
+                onBeginEdit?()
+            }
+            .onChange(of: isEditing) { _, nowEditing in
+                if nowEditing { isFocused = true }
+            }
+            .help(Text(isEditing ? "history.edit.save_hint" : "history.edit.double_click_hint"))
         }
     }
 
