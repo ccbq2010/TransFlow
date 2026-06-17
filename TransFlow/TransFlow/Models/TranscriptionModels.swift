@@ -7,7 +7,7 @@ struct TranscriptionSentence: Identifiable, Sendable {
     let startTimestamp: Date
     /// When the sentence was finalized
     let timestamp: Date
-    let text: String
+    var text: String
     var translation: String?
     /// Assigned speaker (e.g. "speaker_0"), nil if diarization disabled or pending
     var speakerId: String?

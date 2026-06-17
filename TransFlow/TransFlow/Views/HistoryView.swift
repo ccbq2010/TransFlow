@@ -617,8 +617,6 @@ struct SessionDetailView: View {
                             entry: entry,
                             isActive: audioPlayer.activeEntryIndex == index,
                             hasAudioOffset: audioPlayer.entryOffset(at: index) != nil,
-                            isEditing: editingIndex == index,
-                            editingDraft: editingIndex == index ? editingDraft : nil,
                             onTimestampTap: {
                                 if audioPlayer.entryOffset(at: index) != nil {
                                     audioPlayer.seekToEntry(at: index)
@@ -627,6 +625,8 @@ struct SessionDetailView: View {
                                     }
                                 }
                             },
+                            isEditing: editingIndex == index,
+                            editingDraft: editingIndex == index ? editingDraft : nil,
                             onBeginEdit: { beginEdit(at: index) },
                             onDraftChange: { newVal in editingDraft = newVal },
                             onCommitEdit: { commitEdit(at: index) },
@@ -1259,14 +1259,14 @@ struct VideoSessionDetailView: View {
                         VideoSegmentRow(
                             segment: segment,
                             isActive: playerModel.activeSegmentIndex == index,
-                            isEditing: editingIndex == index,
-                            editingDraft: editingIndex == index ? editingDraft : nil,
                             onTap: {
                                 playerModel.seekToSegment(at: index)
                             },
                             onSpeakerTap: { speakerId in
                                 beginSpeakerRename(speakerId)
                             },
+                            isEditing: editingIndex == index,
+                            editingDraft: editingIndex == index ? editingDraft : nil,
                             onBeginEdit: { beginEdit(at: index) },
                             onDraftChange: { newVal in editingDraft = newVal },
                             onCommitEdit: { commitEdit(at: index) },
