@@ -261,10 +261,10 @@ struct VideoTranscriptionView: View {
                         }
                     } trailing: {
                         Picker("", selection: $viewModel.targetLanguage) {
-                            Text("中文 (简体)").tag(Locale.Language(identifier: "zh-Hans"))
-                            Text("English").tag(Locale.Language(identifier: "en"))
-                            Text("日本語").tag(Locale.Language(identifier: "ja"))
-                            Text("한국어").tag(Locale.Language(identifier: "ko"))
+                            Text(languageDisplayName("zh-Hans")).tag(Locale.Language(identifier: "zh-Hans"))
+                            Text(languageDisplayName("en")).tag(Locale.Language(identifier: "en"))
+                            Text(languageDisplayName("ja")).tag(Locale.Language(identifier: "ja"))
+                            Text(languageDisplayName("ko")).tag(Locale.Language(identifier: "ko"))
                         }
                         .pickerStyle(.menu)
                         .fixedSize()
@@ -487,6 +487,11 @@ struct VideoTranscriptionView: View {
         let m = Int(seconds) / 60
         let s = Int(seconds) % 60
         return String(format: "%d:%02d", m, s)
+    }
+
+    /// 返回语言标识在当前系统语言下的本地化显示名。
+    private func languageDisplayName(_ identifier: String) -> String {
+        Locale.current.localizedString(forIdentifier: identifier) ?? identifier
     }
 
 }

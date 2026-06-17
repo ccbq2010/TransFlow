@@ -64,6 +64,16 @@ final class VideoTranscriptionViewModel {
         }
     }
 
+    deinit {
+        // 兜底清理：deinit 是非隔离的，不能直接访问 @MainActor 隔离属性。
+        // 用 Task 兜底在 MainActor 上清理，若 VM 已释放则 weak self 为 nil 跳过。
+        // 正常路径下 clearFile() 会调用 stopPlaybackObservation()。
+        Task { @MainActor [weak self] in
+            self?.processingTask?.cancel()
+            self?.stopPlaybackObservation()
+        }
+    }
+
     func refreshAvailableLanguages() async {
         await modelManager.refreshAllStatuses()
         availableLanguages = modelManager.supportedLocales
@@ -267,7 +277,14 @@ final class VideoTranscriptionViewModel {
         samples: [Float],
         locale: Locale
     ) async throws -> [TranscriptionSentence] {
-        let engine = SpeechEngine(locale: locale)
+        let engine: TranscriptionEngineProtocol = {
+            switch AppSettings.shared.transcriptionEngine {
+            case .appleSpeech:
+                return SpeechEngine(locale: locale)
+            case .whisperKit:
+                return WhisperKitSpeechEngine(locale: locale)
+            }
+        }()
 
         // Use 200ms chunks to match SpeechEngine's internal accumulator.
         // Pace delivery with a small sleep to prevent SpeechAnalyzer timestamp overlap errors.
@@ -304,10 +321,13 @@ final class VideoTranscriptionViewModel {
         var sentences: [TranscriptionSentence] = []
         let events = engine.processStream(stream)
 
+        let corrector = HotwordCorrector(hotwords: AppSettings.shared.hotwords)
+
         let estimatedSentences = max(Double(totalSamples) / 16_000 / 5, 1)
         for await event in events {
             switch event {
-            case .sentenceComplete(let sentence):
+            case .sentenceComplete(var sentence):
+                sentence.text = corrector.correct(sentence.text)
                 sentences.append(sentence)
                 let progress = Double(sentences.count) / estimatedSentences
                 state = .transcribing(progress: min(progress, 1.0))
