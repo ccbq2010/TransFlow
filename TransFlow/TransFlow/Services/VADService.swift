@@ -1,0 +1,120 @@
+import Foundation
+
+/// Voice Activity Detection service for WhisperKit path.
+///
+/// Filters out silent segments from audio before feeding to WhisperKit,
+/// preventing the model from hallucinating text during long silence periods.
+///
+/// Uses a simple energy-based VAD as a lightweight first-pass filter.
+/// Can be upgraded to Silero VAD (Core ML) when a suitable Swift package
+/// or converted model becomes available.
+final class VADService: Sendable {
+    /// RMS energy threshold below which audio is considered silence.
+    /// Tuned for 16kHz mono Float32 audio.
+    private let silenceThreshold: Float
+
+    /// Minimum duration (seconds) of continuous speech to keep a segment.
+    /// Filters out short noise bursts.
+    private let minSpeechDuration: Double
+
+    /// Minimum duration (seconds) of continuous silence to split segments.
+    private let minSilenceDuration: Double
+
+    /// Sample rate of the input audio.
+    private let sampleRate: Int
+
+    init(
+        silenceThreshold: Float = 0.01,
+        minSpeechDuration: Double = 0.3,
+        minSilenceDuration: Double = 0.5,
+        sampleRate: Int = 16000
+    ) {
+        self.silenceThreshold = silenceThreshold
+        self.minSpeechDuration = minSpeechDuration
+        self.minSilenceDuration = minSilenceDuration
+        self.sampleRate = sampleRate
+    }
+
+    /// Detect speech segments in the given audio samples.
+    /// Returns an array of (startSample, endSample) ranges for speech regions.
+    func detectSpeechSegments(_ samples: [Float]) -> [ClosedRange<Int>] {
+        guard !samples.isEmpty else { return [] }
+
+        let frameSize = sampleRate / 50 // 20ms frames
+        let frameCount = samples.count / frameSize
+        guard frameCount > 0 else { return [] }
+
+        // Compute RMS energy per frame
+        var frameEnergies: [Float] = []
+        for i in 0..<frameCount {
+            let start = i * frameSize
+            let end = min(start + frameSize, samples.count)
+            let frame = samples[start..<end]
+            let rms = sqrt(frame.reduce(0.0) { $0 + $1 * $1 } / Float(frame.count))
+            frameEnergies.append(rms)
+        }
+
+        // Classify frames as speech or silence
+        var isSpeech: [Bool] = frameEnergies.map { $0 >= silenceThreshold }
+
+        // Smooth: require min consecutive speech frames to start a segment
+        let minSpeechFrames = Int(minSpeechDuration * 50) // 50 fps
+        let minSilenceFrames = Int(minSilenceDuration * 50)
+
+        // Find speech segments
+        var segments: [ClosedRange<Int>] = []
+        var inSpeech = false
+        var speechStart = 0
+        var silenceCount = 0
+
+        for (i, speech) in isSpeech.enumerated() {
+            if speech {
+                if !inSpeech {
+                    speechStart = i
+                    inSpeech = true
+                }
+                silenceCount = 0
+            } else {
+                if inSpeech {
+                    silenceCount += 1
+                    if silenceCount >= minSilenceFrames {
+                        // End of speech segment
+                        let endFrame = i - silenceCount
+                        let startSample = speechStart * frameSize
+                        let endSample = endFrame * frameSize
+                        if endSample - startSample >= Int(minSpeechDuration * Double(sampleRate)) {
+                            segments.append(startSample...endSample)
+                        }
+                        inSpeech = false
+                        silenceCount = 0
+                    }
+                }
+            }
+        }
+
+        // Handle trailing speech
+        if inSpeech {
+            let startSample = speechStart * frameSize
+            let endSample = samples.count
+            if endSample - startSample >= Int(minSpeechDuration * Double(sampleRate)) {
+                segments.append(startSample...endSample)
+            }
+        }
+
+        return segments
+    }
+
+    /// Extract only speech portions from the audio samples.
+    /// Returns concatenated speech segments (silence removed).
+    func extractSpeech(_ samples: [Float]) -> [Float] {
+        let segments = detectSpeechSegments(samples)
+        guard !segments.isEmpty else { return [] }
+        return segments.flatMap { range in
+            // ClosedRange 上界可能等于 samples.count（trailing speech），
+            // 用 Range 切片避免越界
+            let upper = min(range.upperBound, samples.count - 1)
+            guard range.lowerBound <= upper else { return [Float]() }
+            return Array(samples[range.lowerBound...upper])
+        }
+    }
+}
