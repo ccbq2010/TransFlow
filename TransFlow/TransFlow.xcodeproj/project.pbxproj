@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		974F98D42FE2C3F30016DE24 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = WK0000012F4A0001006D8A00 /* WhisperKit */; };
 		F47676282F55353B00696E28 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = F4D1A0022F4A0001006D8A00 /* FluidAudio */; };
 /* End PBXBuildFile section */
 
@@ -69,6 +70,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				974F98D42FE2C3F30016DE24 /* WhisperKit in Frameworks */,
 				F47676282F55353B00696E28 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -131,6 +133,7 @@
 			name = TransFlow;
 			packageProductDependencies = (
 				F4D1A0022F4A0001006D8A00 /* FluidAudio */,
+				WK0000012F4A0001006D8A00 /* WhisperKit */,
 			);
 			productName = TransFlow;
 			productReference = F4C5EDF42F3638BD006D8A00 /* TransFlow.app */;
@@ -216,7 +219,8 @@
 			mainGroup = F4C5EDEB2F3638BD006D8A00;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F4D1A0012F4A0000006D8A00 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+			F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "FluidAudio" */,
+			WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F4C5EDF52F3638BD006D8A00 /* Products */;
@@ -595,22 +599,27 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		F4D1A0012F4A0000006D8A00 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.12.1;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "FluidAudio" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../.local-packages/FluidAudio";
 		};
-/* End XCRemoteSwiftPackageReference section */
+		WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "WhisperKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../.local-packages/WhisperKit";
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		F4D1A0022F4A0001006D8A00 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F4D1A0012F4A0000006D8A00 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			package = F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		WK0000012F4A0001006D8A00 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
