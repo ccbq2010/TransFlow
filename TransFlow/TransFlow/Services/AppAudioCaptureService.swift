@@ -140,7 +140,14 @@ final class AppAudioCaptureService: NSObject, Sendable {
         nonisolated(unsafe) let capturedStream = scStream
         let stop: @Sendable () -> Void = {
             Task {
-                try? await capturedStream.stopCapture()
+                do {
+                    try await capturedStream.stopCapture()
+                } catch {
+                    ErrorLogger.shared.log(
+                        "AppAudioCapture stopCapture failed: \(error.localizedDescription)",
+                        source: "AppAudioCapture"
+                    )
+                }
             }
             handler.finish()
         }
@@ -197,7 +204,14 @@ final class AppAudioCaptureService: NSObject, Sendable {
         nonisolated(unsafe) let capturedStream = scStream
         let stop: @Sendable () -> Void = {
             Task {
-                try? await capturedStream.stopCapture()
+                do {
+                    try await capturedStream.stopCapture()
+                } catch {
+                    ErrorLogger.shared.log(
+                        "SystemAudioCapture stopCapture failed: \(error.localizedDescription)",
+                        source: "AppAudioCapture"
+                    )
+                }
             }
             handler.finish()
         }

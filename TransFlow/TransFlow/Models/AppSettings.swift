@@ -83,6 +83,28 @@ enum FloatingPanelMaxEntries: Int, CaseIterable, Identifiable {
     }
 }
 
+/// Transcription engine selection.
+enum TranscriptionEngine: String, CaseIterable, Identifiable {
+    case appleSpeech = "apple"
+    case whisperKit = "whisper"
+
+    var id: String { rawValue }
+
+    var displayName: LocalizedStringKey {
+        switch self {
+        case .appleSpeech: "engine.apple_speech"
+        case .whisperKit: "engine.whisper_kit"
+        }
+    }
+
+    var description: LocalizedStringKey {
+        switch self {
+        case .appleSpeech: "engine.apple_speech.description"
+        case .whisperKit: "engine.whisper_kit.description"
+        }
+    }
+}
+
 /// Centralized app settings persisted via UserDefaults.
 @Observable
 @MainActor
@@ -94,6 +116,13 @@ final class AppSettings {
         didSet {
             UserDefaults.standard.set(appLanguage.rawValue, forKey: "appLanguage")
             applyLanguage()
+        }
+    }
+
+    /// The transcription engine to use.
+    var transcriptionEngine: TranscriptionEngine {
+        didSet {
+            UserDefaults.standard.set(transcriptionEngine.rawValue, forKey: "transcriptionEngine")
         }
     }
 
@@ -159,6 +188,9 @@ final class AppSettings {
         let language = AppLanguage(rawValue: storedLang) ?? .system
         self.appLanguage = language
 
+        let storedEngine = UserDefaults.standard.string(forKey: "transcriptionEngine") ?? "apple"
+        self.transcriptionEngine = TranscriptionEngine(rawValue: storedEngine) ?? .appleSpeech
+
         let storedAppearance = UserDefaults.standard.string(forKey: "appAppearance") ?? "system"
         self.appAppearance = AppAppearance(rawValue: storedAppearance) ?? .system
 
@@ -172,6 +204,7 @@ final class AppSettings {
 
         self.diarizationSensitivity = UserDefaults.standard.object(forKey: "diarizationSensitivity") as? Double ?? 0.8
         self.liveEnableDiarization = UserDefaults.standard.object(forKey: "liveEnableDiarization") as? Bool ?? false
+        self.hotwords = UserDefaults.standard.stringArray(forKey: "hotwords") ?? []
 
         self.videoSourceLanguage = UserDefaults.standard.string(forKey: "videoSourceLanguage") ?? "en"
         self.videoEnableTranslation = UserDefaults.standard.bool(forKey: "videoEnableTranslation")
@@ -220,6 +253,16 @@ final class AppSettings {
     var liveEnableDiarization: Bool {
         didSet {
             UserDefaults.standard.set(liveEnableDiarization, forKey: "liveEnableDiarization")
+        }
+    }
+
+    // MARK: - Hotwords
+
+    /// User-defined hotwords for post-processing transcription output.
+    /// Each entry: "standard" or "standard,variant1,variant2" (one per line).
+    var hotwords: [String] {
+        didSet {
+            UserDefaults.standard.set(hotwords, forKey: "hotwords")
         }
     }
 

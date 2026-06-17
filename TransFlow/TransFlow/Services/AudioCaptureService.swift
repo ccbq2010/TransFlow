@@ -69,6 +69,8 @@ final class AudioCaptureService: @unchecked Sendable {
         do {
             try engine.start()
         } catch {
+            // 修复：engine.start() 失败时必须移除已安装的 tap，否则下次 installTap 会崩溃
+            inputNode.removeTap(onBus: 0)
             continuation.finish()
             return (stream, {})
         }

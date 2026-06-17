@@ -29,6 +29,8 @@ final class TransFlowViewModel {
     var errorMessage: String?
     /// Whether to show the "model not ready" alert prompting user to go to Settings.
     var showModelNotReadyAlert: Bool = false
+    /// Whether to show the WhisperKit model not ready alert.
+    var showWhisperKitModelNotReadyAlert: Bool = false
     /// Microphone permission granted
     var micPermissionGranted: Bool = false
 
@@ -51,7 +53,7 @@ final class TransFlowViewModel {
 
     private let audioCaptureService = AudioCaptureService()
     private let audioRecordingService = AudioRecordingService()
-    private var speechEngine: SpeechEngine?
+    private var speechEngine: TranscriptionEngineProtocol?  // Protocol-based, no AnyObject cast needed
     private var stopAudioCapture: (@Sendable () -> Void)?
     private var listeningTask: Task<Void, Never>?
     private var audioLevelTask: Task<Void, Never>?
@@ -64,6 +66,21 @@ final class TransFlowViewModel {
 
     /// When the current partial utterance started (for flushing on stop).
     private var partialStartTimestamp: Date?
+
+    /// Cached hotword corrector — rebuilt when hotwords change.
+    /// 通过比较 hotwords 哈希检测变化，避免每次转写都重建。
+    private var _hotwordCorrector: HotwordCorrector = HotwordCorrector(hotwords: AppSettings.shared.hotwords)
+    private var _cachedHotwordsHash: Int = AppSettings.shared.hotwords.hashValue
+
+    private var hotwordCorrector: HotwordCorrector {
+        let currentHotwords = AppSettings.shared.hotwords
+        let currentHash = currentHotwords.hashValue
+        if currentHash != _cachedHotwordsHash {
+            _hotwordCorrector = HotwordCorrector(hotwords: currentHotwords)
+            _cachedHotwordsHash = currentHash
+        }
+        return _hotwordCorrector
+    }
 
     /// Session start time for converting absolute timestamps to relative offsets.
     private var sessionStartTime: Date?
@@ -81,6 +98,22 @@ final class TransFlowViewModel {
             await initialize()
         }
         setupLifecycleObserver()
+    }
+
+    deinit {
+        // 兜底清理：deinit 是非隔离的，不能直接访问 @MainActor 隔离属性。
+        // 用 Task 兜底在 MainActor 上清理，若 VM 已释放则 weak self 为 nil 跳过。
+        // 正常路径下 stopListening() 会被调用并清理所有资源。
+        Task { @MainActor [weak self] in
+            self?.listeningTask?.cancel()
+            self?.audioLevelTask?.cancel()
+            self?.recordingTask?.cancel()
+            self?.diarizationTask?.cancel()
+            self?.stopAudioCapture?()
+            if let observer = self?.lifecycleObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
     }
 
     private func initialize() async {
@@ -122,8 +155,18 @@ final class TransFlowViewModel {
     func refreshInstalledLanguages() async {
         await modelManager.refreshAllStatuses()
         let supportedLanguages = modelManager.supportedLocales.sorted { $0.identifier < $1.identifier }
-        availableLanguages = supportedLanguages.filter { locale in
+        let readyLanguages = supportedLanguages.filter { locale in
             (modelManager.localeStatuses[locale.identifier] ?? .checking).isReady
+        }
+
+        // 同语言代码（如 zh-CN、zh-TW）只保留第一个，避免地区变体重复
+        var seenLanguageCodes = Set<String>()
+        availableLanguages = readyLanguages.filter { locale in
+            let code = locale.language.languageCode?.identifier ?? locale.identifier
+            // 英语保留 en-US 和 en-GB 等常见变体？暂不特殊处理，统一去重
+            if seenLanguageCodes.contains(code) { return false }
+            seenLanguageCodes.insert(code)
+            return true
         }
 
         guard !availableLanguages.isEmpty else { return }
@@ -141,7 +184,8 @@ final class TransFlowViewModel {
             stopListening()
         }
         selectedLanguage = locale
-        speechEngine = SpeechEngine(locale: locale)
+        // 注意：不在这里创建 speechEngine，startListening() 内部会根据当前语言创建。
+        // 之前在这里创建的引擎会立即被 startListening() 覆盖，造成浪费。
         translationService.updateSourceLanguage(from: locale)
 
         Task {
@@ -310,8 +354,43 @@ final class TransFlowViewModel {
                     return
                 }
 
-                let engine = SpeechEngine(locale: selectedLanguage)
-                self.speechEngine = engine
+                // Fork audio stream: engine, UI level, recording, and diarization
+                let (engineStream, engineContinuation) = AsyncStream<AudioChunk>.makeStream(
+                    bufferingPolicy: .bufferingNewest(256)
+                )
+                let (levelStream, levelContinuation) = AsyncStream<AudioChunk>.makeStream(
+                    bufferingPolicy: .bufferingNewest(64)
+                )
+                let (recordingStream, recordingContinuation) = AsyncStream<AudioChunk>.makeStream(
+                    bufferingPolicy: .bufferingNewest(256)
+                )
+                let (diarizationStream, diarizationContinuation) = AsyncStream<AudioChunk>.makeStream(
+                    bufferingPolicy: .bufferingNewest(256)
+                )
+
+                let engine: TranscriptionEngineProtocol
+                let events: AsyncStream<TranscriptionEvent>
+
+                switch AppSettings.shared.transcriptionEngine {
+                case .appleSpeech:
+                    let speechEngine = SpeechEngine(locale: selectedLanguage)
+                    engine = speechEngine
+                    self.speechEngine = speechEngine
+                    events = speechEngine.processStream(engineStream)
+
+                case .whisperKit:
+                    // S3 修复：WhisperKit 路径也检查模型是否就绪
+                    await WhisperKitModelManager.shared.checkStatus()
+                    guard WhisperKitModelManager.shared.isReady else {
+                        showWhisperKitModelNotReadyAlert = true
+                        listeningState = .idle
+                        return
+                    }
+                    let whisperEngine = WhisperKitSpeechEngine(locale: selectedLanguage)
+                    engine = whisperEngine
+                    self.speechEngine = whisperEngine
+                    events = whisperEngine.processStream(engineStream)
+                }
 
                 let audioStream: AsyncStream<AudioChunk>
                 let stop: @Sendable () -> Void
@@ -319,7 +398,7 @@ final class TransFlowViewModel {
                 switch audioSource {
                 case .microphone:
                     guard micPermissionGranted else {
-                        errorMessage = "Microphone permission not granted"
+                        errorMessage = String(localized: "error.mic_permission_denied")
                         ErrorLogger.shared.log("Microphone permission not granted", source: "AudioCapture")
                         listeningState = .idle
                         return
@@ -335,7 +414,7 @@ final class TransFlowViewModel {
 
                 case .appAudio(let target):
                     guard let target else {
-                        errorMessage = "No app selected"
+                        errorMessage = String(localized: "error.no_app_selected")
                         ErrorLogger.shared.log("No app selected for audio capture", source: "AudioCapture")
                         listeningState = .idle
                         return
@@ -347,20 +426,6 @@ final class TransFlowViewModel {
 
                 self.stopAudioCapture = stop
                 self.sessionStartTime = Date()
-
-                // Fork audio stream: engine, UI level, recording, and diarization
-                let (engineStream, engineContinuation) = AsyncStream<AudioChunk>.makeStream(
-                    bufferingPolicy: .bufferingNewest(256)
-                )
-                let (levelStream, levelContinuation) = AsyncStream<AudioChunk>.makeStream(
-                    bufferingPolicy: .bufferingNewest(64)
-                )
-                let (recordingStream, recordingContinuation) = AsyncStream<AudioChunk>.makeStream(
-                    bufferingPolicy: .bufferingNewest(256)
-                )
-                let (diarizationStream, diarizationContinuation) = AsyncStream<AudioChunk>.makeStream(
-                    bufferingPolicy: .bufferingNewest(256)
-                )
 
                 // Audio level update task
                 audioLevelTask = Task {
@@ -447,7 +512,6 @@ final class TransFlowViewModel {
                     source: "Transcription"
                 )
 
-                let events = engine.processStream(engineStream)
                 for await event in events {
                     switch event {
                     case .partial(let text):
@@ -458,6 +522,9 @@ final class TransFlowViewModel {
                         translationService.translatePartial(text)
 
                     case .sentenceComplete(var sentence):
+                        // Apply hotword correction (L1: use cached corrector)
+                        sentence.text = hotwordCorrector.correct(sentence.text)
+
                         if let translation = await translationService.translateSentence(sentence.text) {
                             sentence.translation = translation
                         }
@@ -582,6 +649,12 @@ final class TransFlowViewModel {
     /// Handle incoming diarization segments from the streaming pipeline.
     private func handleDiarizationSegments(_ segments: [RealtimeDiarizationService.SpeakerSegment]) {
         diarizationSegments.append(contentsOf: segments)
+        // 限制 diarizationSegments 大小，避免无限增长。
+        // 保留最近 500 段（约对应最近 ~15 分钟的音频，足够用于 backfill）。
+        // 早期不可靠的段（含 startSilent 填充）会被清除，避免错误分配覆盖后期正确分配。
+        if diarizationSegments.count > 500 {
+            diarizationSegments.removeFirst(diarizationSegments.count - 500)
+        }
         activeSpeakerCount = realtimeDiarizationService?.speakerCount ?? 0
 
         backfillSpeakerIds()

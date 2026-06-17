@@ -16,6 +16,7 @@ struct SettingsView: View {
         svc.sourceLanguage = Locale.Language(identifier: "en")
         return svc
     }()
+    @State private var whisperKitModelManager = WhisperKitModelManager.shared
     @State private var hasLoadedModels = false
     @State private var isManagingSpeechLanguages = false
     @State private var isManagingTranslationLanguages = false
@@ -33,6 +34,12 @@ struct SettingsView: View {
                     languageRow
                     Divider().padding(.leading, 46)
                     appearanceRow
+                    Divider().padding(.leading, 46)
+                    engineRow
+                    Divider().padding(.leading, 46)
+                    hotwordsRow
+                    Divider().padding(.leading, 46)
+                    whisperKitModelRow
                 }
 
                 // ── Hotkeys Section ──
@@ -130,6 +137,7 @@ struct SettingsView: View {
             await modelManager.refreshAllStatuses()
             diarizationModelManager.checkStatus()
             await translationService.refreshLanguageStatuses()
+            await whisperKitModelManager.checkStatus()
         }
         .onAppear {
             if hasLoadedModels {
@@ -137,6 +145,7 @@ struct SettingsView: View {
                     await modelManager.refreshAllStatuses()
                     diarizationModelManager.checkStatus()
                     await translationService.refreshLanguageStatuses()
+                    await whisperKitModelManager.checkStatus()
                 }
             }
         }
@@ -257,6 +266,209 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    // MARK: - Engine Row
+
+    private var engineRow: some View {
+        HStack {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("settings.engine")
+                        .font(.system(size: 13, weight: .regular))
+                    Text(engineDescription)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                }
+            } icon: {
+                Image(systemName: "cpu")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.indigo)
+                    .frame(width: 24)
+            }
+
+            Spacer()
+
+            Picker("", selection: $settings.transcriptionEngine) {
+                ForEach(TranscriptionEngine.allCases) { engine in
+                    Text(engine.displayName)
+                        .tag(engine)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+            .tint(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var engineDescription: LocalizedStringKey {
+        switch settings.transcriptionEngine {
+        case .appleSpeech: "engine.apple_speech.description"
+        case .whisperKit: "engine.whisper_kit.description"
+        }
+    }
+
+    // MARK: - Hotwords Row
+
+    private var hotwordsRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label {
+                    Text("settings.hotwords")
+                        .font(.system(size: 13, weight: .regular))
+                } icon: {
+                    Image(systemName: "textformat.abc")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.teal)
+                        .frame(width: 24)
+                }
+                Spacer()
+            }
+
+            Text("settings.hotwords.hint")
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.tertiary)
+
+            TextField(
+                "settings.hotwords.placeholder",
+                text: Binding(
+                    get: { settings.hotwords.joined(separator: "\n") },
+                    set: { newValue in
+                        settings.hotwords = newValue
+                            .split(separator: "\n")
+                            .map { $0.trimmingCharacters(in: .whitespaces) }
+                            .filter { !$0.isEmpty }
+                    }
+                ),
+                axis: .vertical
+            )
+            .lineLimit(3...6)
+            .font(.system(size: 12, design: .monospaced))
+            .textFieldStyle(.roundedBorder)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - WhisperKit Model Row
+
+    private var whisperKitModelRow: some View {
+        HStack {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("settings.whisperkit_model.title")
+                        .font(.system(size: 13, weight: .regular))
+                    Text(whisperKitModelStatusText)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(whisperKitModelStatusColor)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+            } icon: {
+                whisperKitModelStatusIcon
+                    .frame(width: 24)
+            }
+
+            Spacer()
+
+            whisperKitModelAction
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var whisperKitModelStatusText: String {
+        switch whisperKitModelManager.downloadState {
+        case .notDownloaded:
+            return String(localized: "settings.whisperkit_model.download")
+        case .downloading(let progress):
+            return "\(String(localized: "settings.whisperkit_model.downloading")) \(Int(progress * 100))%"
+        case .ready:
+            return String(localized: "settings.whisperkit_model.ready")
+        case .failed(let message):
+            return message
+        }
+    }
+
+    private var whisperKitModelStatusColor: Color {
+        switch whisperKitModelManager.downloadState {
+        case .notDownloaded: .secondary
+        case .downloading: .blue
+        case .ready: .green
+        case .failed: .orange
+        }
+    }
+
+    @ViewBuilder
+    private var whisperKitModelStatusIcon: some View {
+        switch whisperKitModelManager.downloadState {
+        case .notDownloaded:
+            Image(systemName: "arrow.down.circle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+        case .downloading:
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 14, height: 14)
+        case .ready:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.green)
+        case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private var whisperKitModelAction: some View {
+        switch whisperKitModelManager.downloadState {
+        case .notDownloaded, .failed:
+            Button {
+                Task {
+                    await whisperKitModelManager.downloadModel()
+                }
+            } label: {
+                Text("model_action.download")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color.accentColor)
+                    )
+            }
+            .buttonStyle(.plain)
+
+        case .downloading(let progress):
+            HStack(spacing: 4) {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .frame(width: 50)
+                Text("\(Int(progress * 100))%")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.blue)
+            }
+
+        case .ready:
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9, weight: .bold))
+                Text("model_status.ready")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(.green)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color.green.opacity(0.12))
+            )
+        }
     }
 
     // MARK: - Feedback Row

@@ -4,7 +4,7 @@ import CoreMedia
 
 /// Uses macOS 26.0 SpeechAnalyzer + SpeechTranscriber for real-time transcription.
 /// Accepts an AudioChunk stream (16kHz mono Float32), outputs TranscriptionEvent stream.
-final class SpeechEngine: Sendable {
+final class SpeechEngine: TranscriptionEngineProtocol {
     private let locale: Locale
 
     init(locale: Locale) {
