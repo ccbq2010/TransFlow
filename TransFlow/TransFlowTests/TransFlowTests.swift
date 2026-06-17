@@ -9,9 +9,5 @@ import Testing
 @testable import TransFlow
 
 struct TransFlowTests {
-
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-    }
-
+    // 通用测试入口。具体测试按模块拆分到独立的 *Tests.swift 文件。
 }
