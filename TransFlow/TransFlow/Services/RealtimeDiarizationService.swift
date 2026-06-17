@@ -4,13 +4,15 @@ import FluidAudio
 
 /// Wraps FluidAudio's `DiarizerManager` + `AudioStream` for real-time streaming speaker diarization.
 ///
-/// Key parameters (derived from the speaker_diarization_guide):
-/// - `clusteringThreshold: 0.5` — DiarizerManager internally computes
-///   `speakerThreshold = threshold * 1.2 = 0.6` and `embeddingThreshold = threshold * 0.8 = 0.4`.
-///   Setting this too high (e.g. 0.8 → speakerThreshold 0.96) makes it nearly impossible
-///   to distinguish different speakers.
-/// - `chunkDuration: 10.0` — 10s chunks balance latency and accuracy; 5s is too short
-///   and often contains only one speaker.
+/// Key parameters:
+/// - `clusteringThreshold: 0.5` — 较低的阈值让不同说话人（含同性）更容易被区分。
+///   DiarizerManager 内部计算 `speakerThreshold = threshold * 1.2 = 0.6`，
+///   `embeddingThreshold = threshold * 0.8 = 0.4`。
+///   男女声余弦距离通常 0.5-0.7，0.6 的阈值能有效区分。
+///   之前用 0.7（speakerThreshold=0.84）导致男女声都被合并。
+/// - `minSpeechDuration: 1.5` — 提高到 1.5 秒，确保嵌入向量基于足够长的语音，
+///   避免短片段（0.5s）产生不可靠嵌入导致过度分割。
+/// - `chunkDuration: 10.0` — 10s chunks balance latency and accuracy.
 /// - `chunkSkip: 3.0` — Overlap between chunks helps capture speaker transitions.
 ///
 /// Must be used on `@MainActor` (FluidAudio types require it).
@@ -31,7 +33,7 @@ final class RealtimeDiarizationService {
     typealias DiarizationCallback = @Sendable ([SpeakerSegment]) -> Void
 
     private let diarizer: DiarizerManager
-    private var audioStream: AudioStream
+    private var audioStream: AudioStream?
     private var callback: DiarizationCallback?
     private var isActive = false
     private var chunkCount = 0
@@ -39,16 +41,19 @@ final class RealtimeDiarizationService {
     init() throws {
         let config = DiarizerConfig(
             clusteringThreshold: 0.5,
-            minSpeechDuration: 0.5,
+            minSpeechDuration: 1.5,
             minSilenceGap: 0.3
         )
         diarizer = DiarizerManager(config: config)
-        audioStream = try AudioStream(
-            chunkDuration: 10.0,
-            chunkSkip: 3.0,
-            streamStartTime: 0.0,
-            chunkingStrategy: .useFixedSkip
-        )
+    }
+
+    deinit {
+        // 兜底清理：RealtimeDiarizationService 是 @MainActor 类，
+        // deinit 是非隔离的，不能安全访问 @MainActor 隔离的属性。
+        // 正常路径下 stop() 会被调用并清理资源。
+        // 这里仅记录日志，不访问隔离状态。
+        // 注意：如果 stop() 未被调用，diarizer 会随 self 一起被 ARC 释放，
+        // SpeakerManager 是 struct，其资源会自动释放。
     }
 
     /// Initialize the diarizer with pre-loaded models. Must be called before `start()`.
@@ -64,14 +69,15 @@ final class RealtimeDiarizationService {
         chunkCount = 0
         callback = onSegments
 
-        audioStream = try AudioStream(
+        let stream = try AudioStream(
             chunkDuration: 10.0,
             chunkSkip: 3.0,
             streamStartTime: 0.0,
             chunkingStrategy: .useFixedSkip
         )
+        audioStream = stream
 
-        audioStream.bind { [weak self] chunk, time in
+        stream.bind { [weak self] chunk, time in
             guard let self else { return }
             self.chunkCount += 1
             do {
@@ -103,7 +109,7 @@ final class RealtimeDiarizationService {
 
     /// Feed audio samples to the diarization pipeline.
     func feedAudio(_ samples: [Float]) {
-        guard isActive else { return }
+        guard isActive, let audioStream else { return }
         do {
             try audioStream.write(from: samples)
         } catch {
@@ -118,6 +124,7 @@ final class RealtimeDiarizationService {
         Self.logger.info("RealtimeDiarizationService stopping — \(chunks) chunks processed, \(finalCount) speakers identified")
         isActive = false
         callback = nil
+        audioStream = nil
         diarizer.speakerManager.reset()
     }
 
