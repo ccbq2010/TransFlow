@@ -301,7 +301,7 @@ struct ControlBarView: View {
                         viewModel.switchLanguage(to: locale)
                     } label: {
                         HStack {
-                            Text(locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier)
+                            Text(languageDisplayName(for: locale))
                             if locale.identifier == viewModel.selectedLanguage.identifier {
                                 Image(systemName: "checkmark")
                             }
@@ -343,9 +343,16 @@ struct ControlBarView: View {
         guard !viewModel.availableLanguages.isEmpty else {
             return String(localized: "control.language_none")
         }
-        return viewModel.selectedLanguage.localizedString(
-            forIdentifier: viewModel.selectedLanguage.identifier
-        ) ?? viewModel.selectedLanguage.identifier
+        return languageDisplayName(for: viewModel.selectedLanguage)
+    }
+
+    /// 只显示语言名（如"中文"），不显示地区变体
+    private func languageDisplayName(for locale: Locale) -> String {
+        // 用语言代码获取纯语言名，如 "zh" -> "中文"
+        if let code = locale.language.languageCode?.identifier {
+            return Locale.current.localizedString(forLanguageCode: code) ?? locale.identifier
+        }
+        return locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier
     }
 
     // MARK: - Translation Controls

@@ -25,6 +25,7 @@ struct MediaPlayerBarView: View {
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isPlaying ? "暂停" : "播放")
             .contentTransition(.symbolEffect(.replace))
 
             Text(formatTime(currentTime))

@@ -61,9 +61,10 @@ final class ErrorLogger: Sendable {
 
     // MARK: - Public API
 
-    /// Legacy entry point — logs at error level by default.
+    /// Generic entry point — logs at info level.
+    /// Use `error()` / `warning()` / `info()` for explicit severity.
     func log(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
-        write(message, level: .error, source: source, file: file, line: line)
+        write(message, level: .info, source: source, file: file, line: line)
     }
 
     func info(_ message: String, source: String, file: String = #fileID, line: Int = #line) {

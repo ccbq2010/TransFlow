@@ -55,6 +55,7 @@ struct TranscriptionView: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("transcription.auto_scroll_toggle"))
         .padding(.trailing, 16)
         .padding(.bottom, 12)
         .help(Text(autoScroll ? "transcription.auto_scroll_on" : "transcription.auto_scroll_off"))

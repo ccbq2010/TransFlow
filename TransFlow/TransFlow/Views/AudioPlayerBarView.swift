@@ -19,6 +19,7 @@ struct AudioPlayerBarView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(player.isPlaying ? "暂停" : "播放")
                 .contentTransition(.symbolEffect(.replace))
 
                 Button {
@@ -33,6 +34,7 @@ struct AudioPlayerBarView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("停止")
             }
 
             Text(formatTime(player.currentTime))
