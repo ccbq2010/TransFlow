@@ -9,8 +9,9 @@ alwaysApply: true
 ## 质量检查
 - 确保 xcode build 成功
 
-## DMG 打包
-- 使用 `build-dmg` skill 打包 DMG（`./scripts/build-dmg.sh`）
+## PKG 发布
+- 仅使用 `./scripts/build-pkg.sh` 生成安装包，发布流程统一为 PKG-only
+- 发布 GitHub Release 时只上传经过 Developer ID 签名、notarization 和 stapling 的 PKG
 
 ## 国际化（i18n）
 - 所有用户可见字符串使用 `Localizable.xcstrings` String Catalog，key 格式 `模块.描述`（如 `settings.language`）

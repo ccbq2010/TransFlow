@@ -5,7 +5,7 @@
 
   [![GitHub release](https://img.shields.io/github/v/release/Cyronlee/TransFlow?style=flat-square)](https://github.com/Cyronlee/TransFlow/releases)
   [![License](https://img.shields.io/github/license/Cyronlee/TransFlow?style=flat-square)](LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-macOS%2015.0+-blue?style=flat-square&logo=apple)](https://github.com/Cyronlee/TransFlow)
+  [![Platform](https://img.shields.io/badge/platform-macOS%2026.0+-blue?style=flat-square&logo=apple)](https://github.com/Cyronlee/TransFlow)
   [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square&logo=swift)](https://swift.org)
   [![SwiftUI](https://img.shields.io/badge/SwiftUI-✓-blue?style=flat-square&logo=swift)](https://developer.apple.com/swiftui/)
   [![GitHub stars](https://img.shields.io/github/stars/Cyronlee/TransFlow?style=flat-square)](https://github.com/Cyronlee/TransFlow/stargazers)
@@ -57,7 +57,7 @@
 
 ### System Requirements
 
-- macOS 15.0 (Sequoia) or later
+- macOS 26.0 (Tahoe) or later
 - Apple Silicon (arm64) or Intel (x86_64)
 
 ### Download

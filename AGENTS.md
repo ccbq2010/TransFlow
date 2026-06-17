@@ -2,7 +2,7 @@
 
 ## 开发文档
 - 使用 `apple-docs-mcp` 搜索 macOS 开发文档
-- 修改语音转写相关文件前，先读 `docs/speech-model-lifecycle.md`
+- 语音转写相关模块：`TransFlow/TransFlow/Services/SpeechEngine.swift`（Apple Speech）和 `TransFlow/TransFlow/Services/WhisperKitSpeechEngine.swift`（WhisperKit），模型管理见 `SpeechModelManager.swift` 和 `WhisperKitModelManager.swift`
 - Fluid Audio 本地文档位于 `build/DerivedData/SourcePackages/checkouts/FluidAudio/Documentation/`
 
 ## 质量检查

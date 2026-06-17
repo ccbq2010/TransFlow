@@ -5,7 +5,7 @@
 
   [![GitHub release](https://img.shields.io/github/v/release/Cyronlee/TransFlow?style=flat-square)](https://github.com/Cyronlee/TransFlow/releases)
   [![License](https://img.shields.io/github/license/Cyronlee/TransFlow?style=flat-square)](LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-macOS%2015.0+-blue?style=flat-square&logo=apple)](https://github.com/Cyronlee/TransFlow)
+  [![Platform](https://img.shields.io/badge/platform-macOS%2026.0+-blue?style=flat-square&logo=apple)](https://github.com/Cyronlee/TransFlow)
   [![Swift](https://img.shields.io/badge/Swift-6.0-orange?style=flat-square&logo=swift)](https://swift.org)
   [![SwiftUI](https://img.shields.io/badge/SwiftUI-✓-blue?style=flat-square&logo=swift)](https://developer.apple.com/swiftui/)
   [![GitHub stars](https://img.shields.io/github/stars/Cyronlee/TransFlow?style=flat-square)](https://github.com/Cyronlee/TransFlow/stargazers)
@@ -57,7 +57,7 @@
 
 ### 系统要求
 
-- macOS 15.0 (Sequoia) 或更高版本
+- macOS 26.0 (Tahoe) 或更高版本
 - Apple Silicon (arm64) 或 Intel (x86_64)
 
 ### 下载安装
