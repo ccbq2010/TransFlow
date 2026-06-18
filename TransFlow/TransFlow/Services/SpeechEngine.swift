@@ -7,6 +7,9 @@ import CoreMedia
 final class SpeechEngine: TranscriptionEngineProtocol {
     private let locale: Locale
 
+    /// Apple Speech is a built-in framework — available on every supported macOS.
+    @MainActor static var isAvailable: Bool { true }
+
     init(locale: Locale) {
         self.locale = locale
     }
@@ -80,7 +83,7 @@ final class SpeechEngine: TranscriptionEngineProtocol {
                 let sessionStartDate = Date()
 
                 // 7. Start result consumption first (avoid losing early results)
-                nonisolated(unsafe) let capturedStartDate = sessionStartDate
+                let capturedStartDate = sessionStartDate
                 let resultTask = Task(priority: .userInitiated) {
                     do {
                         for try await result in transcriber.results {

@@ -76,9 +76,14 @@ struct MediaPlayerBarView: View {
     private func startObserving() {
         guard let player = playerModel.player else { return }
         if let item = player.currentItem {
-            let dur = CMTimeGetSeconds(item.asset.duration)
-            if dur.isFinite && dur > 0 {
-                duration = dur
+            Task { @MainActor in
+                let dur = try? await item.asset.load(.duration)
+                if let dur {
+                    let secs = CMTimeGetSeconds(dur)
+                    if secs.isFinite && secs > 0 {
+                        duration = secs
+                    }
+                }
             }
         }
 
@@ -91,9 +96,12 @@ struct MediaPlayerBarView: View {
                 isPlaying = playerModel.player?.rate != 0
 
                 if let item = playerModel.player?.currentItem {
-                    let dur = CMTimeGetSeconds(item.asset.duration)
-                    if dur.isFinite && dur > 0 {
-                        duration = dur
+                    let dur = try? await item.asset.load(.duration)
+                    if let dur {
+                        let secs = CMTimeGetSeconds(dur)
+                        if secs.isFinite && secs > 0 {
+                            duration = secs
+                        }
                     }
                 }
             }

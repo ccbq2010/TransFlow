@@ -55,11 +55,10 @@ final class VADService: Sendable {
         }
 
         // Classify frames as speech or silence
-        var isSpeech: [Bool] = frameEnergies.map { $0 >= silenceThreshold }
+        let isSpeech: [Bool] = frameEnergies.map { $0 >= silenceThreshold }
 
-        // Smooth: require min consecutive speech frames to start a segment
-        let minSpeechFrames = Int(minSpeechDuration * 50) // 50 fps
-        let minSilenceFrames = Int(minSilenceDuration * 50)
+        // Smooth: require min consecutive silence frames to end a segment
+        let minSilenceFrames = Int(minSilenceDuration * 50) // 50 fps
 
         // Find speech segments
         var segments: [ClosedRange<Int>] = []

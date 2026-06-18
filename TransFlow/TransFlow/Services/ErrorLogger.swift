@@ -16,7 +16,8 @@ enum LogLevel: String, Sendable {
 /// - Thread-safe via a serial DispatchQueue; all I/O is async and non-blocking.
 /// - Automatically cleans up old log files (keeps the most recent 20).
 final class ErrorLogger: Sendable {
-    static let shared = ErrorLogger()
+    // nonisolated: 单例从任何线程访问；ErrorLogger 是 Sendable，线程安全由内部 DispatchQueue 保证
+    nonisolated static let shared = ErrorLogger()
 
     private let maxLogFiles = 20
     private let queue = DispatchQueue(label: "com.transflow.logger", qos: .utility)
@@ -27,7 +28,9 @@ final class ErrorLogger: Sendable {
 
     // MARK: - Init
 
-    private init() {
+    // nonisolated: 访问 Bundle.main / FileManager 不需要 MainActor；
+    // 整个类的线程安全由内部串行 DispatchQueue 保证。
+    private nonisolated init() {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
@@ -63,31 +66,31 @@ final class ErrorLogger: Sendable {
 
     /// Generic entry point — logs at info level.
     /// Use `error()` / `warning()` / `info()` for explicit severity.
-    func log(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
+    nonisolated func log(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
         write(message, level: .info, source: source, file: file, line: line)
     }
 
-    func info(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
+    nonisolated func info(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
         write(message, level: .info, source: source, file: file, line: line)
     }
 
-    func warning(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
+    nonisolated func warning(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
         write(message, level: .warning, source: source, file: file, line: line)
     }
 
-    func error(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
+    nonisolated func error(_ message: String, source: String, file: String = #fileID, line: Int = #line) {
         write(message, level: .error, source: source, file: file, line: line)
     }
 
     /// Returns the most recent log lines from the in-memory cache (newest last).
-    func recentLines(limit: Int = 500) -> [String] {
+    nonisolated func recentLines(limit: Int = 500) -> [String] {
         queue.sync {
             Array(state.cachedLines.suffix(limit))
         }
     }
 
     /// Exports recent logs to a temporary file and returns its URL.
-    func exportLogs(limit: Int = 2000) -> URL? {
+    nonisolated func exportLogs(limit: Int = 2000) -> URL? {
         let lines = queue.sync { Array(state.cachedLines.suffix(limit)) }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
@@ -110,7 +113,7 @@ final class ErrorLogger: Sendable {
 
     // MARK: - Private
 
-    private func write(_ message: String, level: LogLevel, source: String, file: String, line: Int) {
+    nonisolated private func write(_ message: String, level: LogLevel, source: String, file: String, line: Int) {
         let timestamp = Self.timestampFormatter.string(from: Date())
         let entry = "[\(timestamp)] [\(level.rawValue)] [\(source)] \(message)  (\(file):\(line))"
 
@@ -130,13 +133,14 @@ final class ErrorLogger: Sendable {
         }
     }
 
-    private static let timestampFormatter: DateFormatter = {
+    // DateFormatter 在 Swift 6 中是 Sendable，用 nonisolated 声明可从任何上下文访问
+    nonisolated private static let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return f
     }()
 
-    private static func buildHeader() -> String {
+    nonisolated private static func buildHeader() -> String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         let os = ProcessInfo.processInfo.operatingSystemVersionString
@@ -179,10 +183,11 @@ final class ErrorLogger: Sendable {
 
 private final class LoggerState: @unchecked Sendable {
     let handle: FileHandle?
-    var cachedLines: [String] = []
+    // 线程安全由 ErrorLogger 内部的串行 DispatchQueue 保证
+    nonisolated(unsafe) var cachedLines: [String] = []
     let maxCachedLines = 5000
 
-    init(handle: FileHandle?) {
+    nonisolated init(handle: FileHandle?) {
         self.handle = handle
     }
 }

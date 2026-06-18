@@ -14,7 +14,7 @@ final class AudioRecordingService: @unchecked Sendable {
         let durationMs: Int
     }
 
-    nonisolated(unsafe) private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.transflow", category: "Recording")
+    nonisolated private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.transflow", category: "Recording")
 
     private let lock = NSLock()
 

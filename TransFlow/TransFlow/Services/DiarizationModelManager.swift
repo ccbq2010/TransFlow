@@ -110,7 +110,7 @@ final class DiarizationModelManager {
         let fm = FileManager.default
         if fm.fileExists(atPath: segmentationModelURL.path),
            fm.fileExists(atPath: embeddingModelURL.path) {
-            return try await DiarizerModels.load(
+            return try DiarizerModels.load(
                 localSegmentationModel: segmentationModelURL,
                 localEmbeddingModel: embeddingModelURL
             )

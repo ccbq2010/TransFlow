@@ -60,7 +60,6 @@ struct HotwordCorrector: Sendable {
         }
 
         // Chinese or mixed: simple case-insensitive substring replacement
-        let lowerText = text.lowercased()
         let lowerFrom = from.lowercased()
         var result = text
         var searchRange = result.startIndex..<result.endIndex

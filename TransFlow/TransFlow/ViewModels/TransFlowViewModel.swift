@@ -368,13 +368,11 @@ final class TransFlowViewModel {
                     bufferingPolicy: .bufferingNewest(256)
                 )
 
-                let engine: TranscriptionEngineProtocol
                 let events: AsyncStream<TranscriptionEvent>
 
                 switch AppSettings.shared.transcriptionEngine {
                 case .appleSpeech:
                     let speechEngine = SpeechEngine(locale: selectedLanguage)
-                    engine = speechEngine
                     self.speechEngine = speechEngine
                     events = speechEngine.processStream(engineStream)
 
@@ -387,7 +385,6 @@ final class TransFlowViewModel {
                         return
                     }
                     let whisperEngine = WhisperKitSpeechEngine(locale: selectedLanguage)
-                    engine = whisperEngine
                     self.speechEngine = whisperEngine
                     events = whisperEngine.processStream(engineStream)
                 }
@@ -443,7 +440,7 @@ final class TransFlowViewModel {
                 self.currentRecordingFileName = recFileName
                 jsonlStore.appendRecordingStart(fileName: recFileName, timestamp: recStartTime)
 
-                nonisolated(unsafe) let recorder = audioRecordingService
+                let recorder = audioRecordingService
                 recordingTask = Task.detached {
                     for await chunk in recordingStream {
                         recorder.writeChunk(chunk)

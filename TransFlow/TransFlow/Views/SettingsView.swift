@@ -1050,7 +1050,7 @@ struct SettingsView: View {
         case .notDownloaded, .failed:
             Button {
                 Task {
-                    await modelManager.downloadModel(for: locale)
+                    _ = await modelManager.downloadModel(for: locale)
                     await modelManager.refreshAllStatuses()
                 }
             } label: {

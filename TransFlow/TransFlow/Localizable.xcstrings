@@ -356,23 +356,6 @@
         }
       }
     },
-    "control.system_audio" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "System Audio"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统音频"
-          }
-        }
-      }
-    },
     "control.start_recording" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -475,6 +458,23 @@
         }
       }
     },
+    "control.system_audio" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Audio"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统音频"
+          }
+        }
+      }
+    },
     "control.transcription_language" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -488,6 +488,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "转写语言"
+          }
+        }
+      }
+    },
+    "control.translation_none_available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No installed translation language"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无已安装翻译语言"
           }
         }
       }
@@ -522,23 +539,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不可用"
-          }
-        }
-      }
-    },
-    "control.translation_none_available" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No installed translation language"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无已安装翻译语言"
           }
         }
       }
@@ -645,138 +645,36 @@
         }
       }
     },
-    "settings.hotwords" : {
+    "error.mic_permission_denied" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hotwords"
+            "value" : "Microphone permission not granted"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "热词"
+            "value" : "未授予麦克风权限"
           }
         }
       }
     },
-    "settings.hotwords.placeholder" : {
+    "error.no_app_selected" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "One per line, or comma-separated variants: OpenAI,open eye"
+            "value" : "No app selected"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每行一个，或逗号分隔变体：OpenAI,open eye"
-          }
-        }
-      }
-    },
-    "settings.hotwords.hint" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Corrects misrecognized words in transcription output"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "修正转写结果中的识别错误"
-          }
-        }
-      }
-    },
-    "settings.whisperkit_model.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "WhisperKit Model"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "WhisperKit 模型"
-          }
-        }
-      }
-    },
-    "settings.whisperkit_model.download" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download (~500 MB)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载（约 500 MB）"
-          }
-        }
-      }
-    },
-    "settings.whisperkit_model.downloading" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Downloading…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载中…"
-          }
-        }
-      }
-    },
-    "settings.whisperkit_model.ready" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ready"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已就绪"
-          }
-        }
-      }
-    },
-    "settings.whisperkit_model.failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Download failed"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载失败"
+            "value" : "未选择应用"
           }
         }
       }
@@ -798,74 +696,6 @@
         }
       }
     },
-    "floating_preview.font_size" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Font size"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "字号"
-          }
-        }
-      }
-    },
-    "floating_preview.pin" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pin on top"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "置顶"
-          }
-        }
-      }
-    },
-    "floating_preview.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live preview"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "实时预览"
-          }
-        }
-      }
-    },
-    "floating_preview.unpin" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unpin"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消置顶"
-          }
-        }
-      }
-    },
     "floating_preview.display_settings" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -883,19 +713,19 @@
         }
       }
     },
-    "floating_preview.opacity" : {
+    "floating_preview.font_size" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Opacity"
+            "value" : "Font size"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不透明度"
+            "value" : "字号"
           }
         }
       }
@@ -985,19 +815,70 @@
         }
       }
     },
-    "history.badge.live" : {
+    "floating_preview.opacity" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Live"
+            "value" : "Opacity"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "实时"
+            "value" : "不透明度"
+          }
+        }
+      }
+    },
+    "floating_preview.pin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin on top"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
+          }
+        }
+      }
+    },
+    "floating_preview.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live preview"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时预览"
+          }
+        }
+      }
+    },
+    "floating_preview.unpin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unpin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消置顶"
           }
         }
       }
@@ -1015,6 +896,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "音频"
+          }
+        }
+      }
+    },
+    "history.badge.live" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时"
           }
         }
       }
@@ -1393,23 +1291,6 @@
         }
       }
     },
-    "history.filter.live" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "实时转写"
-          }
-        }
-      }
-    },
     "history.filter.audio" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1423,6 +1304,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "音频转写"
+          }
+        }
+      }
+    },
+    "history.filter.live" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时转写"
           }
         }
       }
@@ -2175,6 +2073,23 @@
         }
       }
     },
+    "settings.check_for_updates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for Updates"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新"
+          }
+        }
+      }
+    },
     "settings.diarization_models" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2260,6 +2175,23 @@
         }
       }
     },
+    "settings.engine" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Engine"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引擎"
+          }
+        }
+      }
+    },
     "settings.feedback" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2290,23 +2222,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "报告问题或建议功能"
-          }
-        }
-      }
-    },
-    "settings.engine" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Engine"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "引擎"
           }
         }
       }
@@ -2511,6 +2426,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快捷键"
+          }
+        }
+      }
+    },
+    "settings.hotwords" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hotwords"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "热词"
+          }
+        }
+      }
+    },
+    "settings.hotwords.hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrects misrecognized words in transcription output"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修正转写结果中的识别错误"
+          }
+        }
+      }
+    },
+    "settings.hotwords.placeholder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One per line, or comma-separated variants: OpenAI,open eye"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行一个，或逗号分隔变体：OpenAI,open eye"
           }
         }
       }
@@ -2838,23 +2804,6 @@
         }
       }
     },
-    "settings.update_ready %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Version %@ ready to install"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "版本 %@ 已就绪，可安装"
-          }
-        }
-      }
-    },
     "settings.update_install" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2889,19 +2838,19 @@
         }
       }
     },
-    "settings.check_for_updates" : {
+    "settings.update_ready %@" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check for Updates"
+            "value" : "Version %@ ready to install"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查更新"
+            "value" : "版本 %@ 已就绪，可安装"
           }
         }
       }
@@ -2919,6 +2868,91 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本"
+          }
+        }
+      }
+    },
+    "settings.whisperkit_model.download" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download (~500 MB)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载（约 500 MB）"
+          }
+        }
+      }
+    },
+    "settings.whisperkit_model.downloading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Downloading…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载中…"
+          }
+        }
+      }
+    },
+    "settings.whisperkit_model.failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download failed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载失败"
+          }
+        }
+      }
+    },
+    "settings.whisperkit_model.ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ready"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已就绪"
+          }
+        }
+      }
+    },
+    "settings.whisperkit_model.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WhisperKit Model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WhisperKit 模型"
           }
         }
       }
@@ -3093,36 +3127,87 @@
         }
       }
     },
-    "error.mic_permission_denied" : {
+    "update_alert.cancel" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Microphone permission not granted"
+            "value" : "Cancel"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未授予麦克风权限"
+            "value" : "取消"
           }
         }
       }
     },
-    "error.no_app_selected" : {
+    "update_alert.message" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No app selected"
+            "value" : "A new version is available. Would you like to update now?"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未选择应用"
+            "value" : "有新版本可用，是否立即更新？"
+          }
+        }
+      }
+    },
+    "update_alert.skip_version" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip This Version"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不再提示此版本"
+          }
+        }
+      }
+    },
+    "update_alert.title %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TransFlow %@ is Available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TransFlow %@ 现已发布"
+          }
+        }
+      }
+    },
+    "update_alert.update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
           }
         }
       }
@@ -3552,90 +3637,14 @@
         }
       }
     },
-    "update_alert.title %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TransFlow %@ is Available"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TransFlow %@ 现已发布"
-          }
-        }
-      }
+    "停止" : {
+
     },
-    "update_alert.message" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A new version is available. Would you like to update now?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "有新版本可用，是否立即更新？"
-          }
-        }
-      }
+    "播放" : {
+
     },
-    "update_alert.update" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Update"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新"
-          }
-        }
-      }
-    },
-    "update_alert.cancel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消"
-          }
-        }
-      }
-    },
-    "update_alert.skip_version" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skip This Version"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不再提示此版本"
-          }
-        }
-      }
+    "暂停" : {
+
     }
   },
   "version" : "1.0"

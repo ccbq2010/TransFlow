@@ -16,6 +16,14 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
     private let onDownloadProgress: (@Sendable (Double) -> Void)?
     private let vadService: VADService
 
+    /// WhisperKit 引擎依赖已下载的 Core ML 模型文件。
+    ///
+    /// 调用 `WhisperKitModelManager.shared.downloadModel()` 进行下载；
+    /// 下载完成后此属性变为 `true`。
+    @MainActor static var isAvailable: Bool {
+        WhisperKitModelManager.shared.isReady
+    }
+
     /// 滑动窗口参数
     private static let windowSeconds = 8.0
     private static let slideSeconds = 3.0
