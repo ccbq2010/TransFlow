@@ -141,21 +141,31 @@ struct SpeakerEnrollmentView: View {
         enrollmentService.reset()
         isRecording = true
 
-        let captureService = AudioCaptureService()
-        let capture = captureService.startCapture()
-        self.audioCapture = captureService
-        self.stopCapture = capture.stop
-
-        // Pipe audio into enrollment service
         Task {
+            let granted = await AudioCaptureService.requestPermission()
+            guard granted else {
+                await MainActor.run {
+                    isRecording = false
+                    errorMessage = String(localized: "error.mic_permission_denied")
+                }
+                return
+            }
+            let captureService = AudioCaptureService()
+            let capture = captureService.startCapture()
+            await MainActor.run {
+                self.audioCapture = captureService
+                self.stopCapture = capture.stop
+                self.timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                    self.recordingDuration = self.enrollmentService.currentDuration
+                }
+            }
+
             for await chunk in capture.stream {
                 enrollmentService.feedAudio(chunk.samples)
+                await MainActor.run {
+                    audioLevel = chunk.level
+                }
             }
-        }
-
-        // Update UI timer
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            recordingDuration = enrollmentService.currentDuration
         }
     }
 
@@ -175,11 +185,13 @@ struct SpeakerEnrollmentView: View {
         Task {
             do {
                 let embedding = try enrollmentService.extractEmbedding()
+                enrollmentService.cleanup()
                 await MainActor.run {
                     isProcessing = false
                     onComplete(embedding)
                 }
             } catch {
+                enrollmentService.cleanup()
                 await MainActor.run {
                     isProcessing = false
                     errorMessage = error.localizedDescription

@@ -26,18 +26,3 @@ struct SpeakerProfile: Identifiable, Codable, Equatable, Sendable {
         self.updatedAt = updatedAt
     }
 }
-
-/// A mapping from an anonymous diarization speaker ID (e.g. "speaker_0") to a
-/// human-readable name. Created when the user renames an anonymous speaker during
-/// or after a session. Persisted alongside the session JSONL.
-struct SpeakerNameMapping: Codable, Equatable, Sendable {
-    let anonymousId: String
-    var name: String
-    let createdAt: Date
-
-    init(anonymousId: String, name: String, createdAt: Date = Date()) {
-        self.anonymousId = anonymousId
-        self.name = name
-        self.createdAt = createdAt
-    }
-}

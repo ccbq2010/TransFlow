@@ -801,12 +801,6 @@ final class TransFlowViewModel {
         speakerNameOverrides[anonymousId] = trimmed
         speakerRefreshID = UUID()
 
-        for i in sentences.indices {
-            if sentences[i].speakerId == anonymousId {
-                sentences[i].speakerId = anonymousId
-            }
-        }
-
         rewriteJSONLWithCurrentSentences()
     }
 

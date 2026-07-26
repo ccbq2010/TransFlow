@@ -65,12 +65,4 @@ struct SpeakerProfilesStoreTests {
         // Different IDs, so not equal
         #expect(p1 != p2)
     }
-
-    // MARK: - SpeakerNameMapping
-
-    @Test func nameMappingCreation() {
-        let mapping = SpeakerNameMapping(anonymousId: "speaker_0", name: "张三")
-        #expect(mapping.anonymousId == "speaker_0")
-        #expect(mapping.name == "张三")
-    }
 }

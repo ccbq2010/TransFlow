@@ -48,7 +48,7 @@ final class KnowledgeStore {
         guard !isLoaded else { return }
         isLoaded = true
 
-        isEmbeddingAvailable = NLEmbedding.sentenceEmbedding(for: .english) != nil
+        isEmbeddingAvailable = Self.currentEmbedding != nil
 
         if fileManager.fileExists(atPath: documentsURL.path),
            let data = try? Data(contentsOf: documentsURL),
@@ -88,6 +88,11 @@ final class KnowledgeStore {
     /// Import raw text as a document.
     @discardableResult
     func importText(_ text: String, name: String) -> KnowledgeDocument {
+        // Skip if a document with the same name already exists
+        if documents.contains(where: { $0.name == name }) {
+            return documents.first(where: { $0.name == name })!
+        }
+
         let doc = KnowledgeDocument(name: name)
         documents.append(doc)
         saveDocuments()
@@ -145,7 +150,7 @@ final class KnowledgeStore {
 
     /// Find the top-K most relevant chunks for a query string using NLEmbedding.
     func retrieveTopK(_ query: String, k: Int = 3) -> [KnowledgeChunk] {
-        guard let embedding = NLEmbedding.sentenceEmbedding(for: .english), !chunks.isEmpty else {
+        guard let embedding = Self.currentEmbedding, !chunks.isEmpty else {
             return []
         }
 
@@ -157,6 +162,15 @@ final class KnowledgeStore {
 
         scored.sort { $0.1 < $1.1 }
         return Array(scored.prefix(k).map { $0.0 })
+    }
+
+    /// Get the best available sentence embedding, preferring the current language.
+    private static var currentEmbedding: NLEmbedding? {
+        let language = Locale.current.language.languageCode?.identifier ?? "en"
+        if let embedding = NLEmbedding.sentenceEmbedding(for: NLLanguage(rawValue: language)) {
+            return embedding
+        }
+        return NLEmbedding.sentenceEmbedding(for: .english)
     }
 
     // MARK: - Delete

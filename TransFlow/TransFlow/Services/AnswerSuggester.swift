@@ -9,8 +9,7 @@ import FoundationModels
 /// Uses Apple FoundationModels (LanguageModelSession) when available
 /// (macOS 15+, Apple Silicon, Apple Intelligence enabled). Otherwise returns
 /// a fallback response suggesting the user enable the feature.
-@MainActor
-final class AnswerSuggester {
+struct AnswerSuggester {
 
     /// Error types for answer suggestions.
     enum SuggestionError: LocalizedError {

@@ -95,7 +95,6 @@ struct KnowledgeManagementView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(doc.name)
                     .font(.system(size: 14, weight: .medium))
-                Text("knowledge.chunk_count \(doc.chunkCount)")
                 Text("\(doc.chunkCount) \(Text("knowledge.chunk_count"))")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
@@ -152,6 +151,8 @@ struct KnowledgeManagementView: View {
         switch result {
         case .success(let urls):
             for url in urls {
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
                 _ = store.importDocument(from: url)
             }
         case .failure:

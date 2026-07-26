@@ -121,20 +121,6 @@ struct SentenceRow: View {
         }
     }
 
-    private func speakerBadge(_ speakerId: String) -> some View {
-        let colorHex = SpeakerColor.color(for: speakerId)
-
-        return Text(displayName(speakerId))
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(Color(hex: colorHex))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color(hex: colorHex).opacity(0.12))
-            )
-    }
-
     private func speakerButton(_ speakerId: String) -> some View {
         let colorHex = SpeakerColor.color(for: speakerId)
 
