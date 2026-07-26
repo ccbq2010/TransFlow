@@ -37,6 +37,9 @@ final class AnswerSuggestionViewModel {
         guard question != lastQuestionText else { return }
         lastQuestionText = question
 
+        // Don't generate if knowledge base is empty
+        guard !knowledgeStore.chunks.isEmpty else { return }
+
         let contextWindow = String(fullContext.suffix(2000))
         let detected = DetectedQuestion(text: question, context: contextWindow)
         lastDetectedQuestion = detected

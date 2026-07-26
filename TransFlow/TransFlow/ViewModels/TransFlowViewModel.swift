@@ -544,7 +544,7 @@ final class TransFlowViewModel {
                             sentence.speakerId = assignSpeaker(for: sentence)
                         }
                         sentences.append(sentence)
-                        jsonlStore.appendEntry(sentence: sentence)
+                        appendSentenceWithSpeakerName(sentence)
                         answerSuggestion.processTranscription(
                             sentence.text,
                             fullContext: currentTranscriptionContext()
@@ -750,7 +750,8 @@ final class TransFlowViewModel {
                         endTime: entry.endTime,
                         originalText: entry.originalText,
                         translatedText: entry.translatedText,
-                        speakerId: sentence.speakerId
+                        speakerId: sentence.speakerId,
+                        speakerName: speakerNameOverrides[sentence.speakerId ?? ""]
                     )
                     updatedLines.append(.content(updated))
                 } else {
@@ -807,5 +808,19 @@ final class TransFlowViewModel {
         }
 
         rewriteJSONLWithCurrentSentences()
+    }
+
+    /// Append a sentence to JSONL, including any user-assigned speaker name.
+    private func appendSentenceWithSpeakerName(_ sentence: TranscriptionSentence) {
+        let formatter = ISO8601DateFormatter()
+        let entry = JSONLContentEntry(
+            startTime: formatter.string(from: sentence.startTimestamp),
+            endTime: formatter.string(from: sentence.timestamp),
+            originalText: sentence.text,
+            translatedText: sentence.translation,
+            speakerId: sentence.speakerId,
+            speakerName: speakerNameOverrides[sentence.speakerId ?? ""]
+        )
+        jsonlStore.appendEntry(entry: entry)
     }
 }

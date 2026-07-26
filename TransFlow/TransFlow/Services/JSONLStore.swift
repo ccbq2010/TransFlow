@@ -67,6 +67,13 @@ final class JSONLStore {
         appendRaw(line, to: fileURL)
     }
 
+    /// Append a pre-built content entry (with speaker name).
+    func appendEntry(entry: JSONLContentEntry) {
+        guard let fileURL = currentFileURL else { return }
+        guard let line = encodeLine(.content(entry)) else { return }
+        appendRaw(line, to: fileURL)
+    }
+
     func appendRecordingStart(fileName: String, timestamp: Date = Date()) {
         guard let fileURL = currentFileURL else { return }
         let marker = JSONLRecordingStart(recordingFile: fileName, timestamp: timestamp)

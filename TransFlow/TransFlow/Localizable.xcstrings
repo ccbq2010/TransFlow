@@ -4258,6 +4258,23 @@
           }
         }
       }
+    },
+    "suggestion.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence is not available. Enable it in System Settings to use answer suggestions."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Intelligence 不可用。请在系统设置中启用以使用答题建议。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

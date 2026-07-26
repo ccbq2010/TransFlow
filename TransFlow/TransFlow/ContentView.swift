@@ -22,12 +22,12 @@ struct ContentView: View {
             // ── Middle: Transcription history ──
             HStack(spacing: 0) {
                 TranscriptionView(
-                sentences: viewModel.sentences,
-                isTranslationEnabled: viewModel.translationService.isEnabled,
-                displayName: viewModel.displayName,
-                onRenameSpeaker: { id, name in
-                    viewModel.renameSpeaker(anonymousId: id, to: name)
-                }
+                    sentences: viewModel.sentences,
+                    isTranslationEnabled: viewModel.translationService.isEnabled,
+                    displayName: viewModel.displayName,
+                    onRenameSpeaker: { id, name in
+                        viewModel.renameSpeaker(anonymousId: id, to: name)
+                    }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .id(viewModel.speakerRefreshID)
@@ -36,6 +36,7 @@ struct ContentView: View {
                     Divider()
                     SuggestionPanelView(viewModel: viewModel.answerSuggestion)
                         .frame(width: 320)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

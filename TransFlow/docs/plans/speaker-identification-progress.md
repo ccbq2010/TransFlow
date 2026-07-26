@@ -1,6 +1,6 @@
 # 多人会议说话人识别 & 知识库答题 — 总体进度
 
-> 创建：2026-07-26 | 最后更新：2026-07-26
+> 创建：2026-07-26 | 最后更新：2026-07-26 (Phase 3)
 
 ## 背景
 
@@ -12,8 +12,6 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 ---
 
 ## Phase 1：Speaker Profiles 注册与匹配 ✅ 已完成
-
-**目标**：会前注册说话人 → 会议中自动匹配 → 可随时改名
 
 | 状态 | 任务 | 文件 |
 |------|------|------|
@@ -34,8 +32,6 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 
 ## Phase 2：知识库 + 答题建议 ✅ 已完成
 
-**目标**：导入文档构建知识库 → 转写中检测问题 → 本地 LLM 生成建议答案
-
 | 状态 | 任务 | 文件 |
 |------|------|------|
 | ✅ | KnowledgeModels（Document/Chunk/Question/Answer 模型） | `Models/KnowledgeModels.swift` |
@@ -51,26 +47,30 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 | ✅ | i18n 新增 16 个 key | `Localizable.xcstrings` |
 | ✅ | xcode build 编译通过 | 2026-07-26 |
 
-**技术选型**：
-- LLM：Apple FoundationModels（macOS 15+, Apple Silicon, Apple Intelligence）
-- Embedding：NLEmbedding.sentenceEmbedding（系统内置, 英文）
-- PDF 解析：PDFKit
-- Fallback：FoundationModels 不可用时隐藏功能并提示
-
-**依赖**：导入文档 → 构建索引 → 开会时使用（非实时导入）
-
 ---
 
-## Phase 3：打磨 ⏳ 待开始
+## Phase 3：打磨 ✅ 已完成
 
 | 状态 | 任务 |
 |------|------|
-| ⬜ | UI polish（speaker badge 样式、建议面板动画） |
-| ⬜ | 性能优化（知识库大文件分块、embedding 缓存） |
-| ⬜ | 边界情况（无麦克风权限、FoundationModels 不可用、空知识库） |
-| ⬜ | 端到端测试 |
-| ⬜ | JSONL 持久化 speaker name 映射 |
+| ✅ | JSONL 持久化 speakerName 字段 |
+| ✅ | 建议面板动画（slide + corner radius + shadow） |
+| ✅ | 空知识库检测（跳过生成） |
+| ✅ | FoundationModels 不可用 fallback UI |
+| ✅ | 修复 SpeakerProfilesView 重复行 |
+| ✅ | ContentView HStack 格式修正 |
+| ⬜ | 端到端测试（需实际设备） |
 | ⬜ | 未匹配声纹"自动学习"加入 profile（Layer 3） |
+
+### Phase 3 变更文件
+- Models/JSONLModels.swift — 新增 speakerName 字段
+- Services/JSONLStore.swift — 新增 appendEntry(entry:) 重载
+- ViewModels/TransFlowViewModel.swift — speakerName 持久化 + 空知识库检测
+- ViewModels/AnswerSuggestionViewModel.swift — 空知识库守卫
+- Views/SuggestionPanelView.swift — 动画 + unavailable 状态
+- Views/SpeakerProfilesView.swift — 修复重复行
+- Views/ContentView.swift — 格式修正 + 面板过渡动画
+- Localizable.xcstrings — 新增 suggestion.unavailable
 
 ---
 
@@ -86,6 +86,7 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 | 知识库模式 | 导入 → 建索引 → 开会用 | 用户明确要求 |
 | FoundationModels API | streamResponse(to:) 流式输出 | 2026 SDK 标准 API |
 | NLEmbedding 检索 | distance(between:and:) 实时计算 | API 不暴露原始向量 |
+| speakerName 持久化 | JSONLContentEntry 新增字段 | 简单可靠、与现有格式兼容 |
 
 ---
 
@@ -98,17 +99,7 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 - Views/SpeakerEnrollmentView.swift
 - Views/SpeakerProfilesView.swift
 
-### Phase 1 修改（8 个文件）
-- Services/RealtimeDiarizationService.swift
-- ViewModels/TransFlowViewModel.swift
-- Views/TranscriptionView.swift
-- Views/SidebarView.swift
-- Views/MainView.swift
-- Views/ContentView.swift
-- Models/TranscriptionModels.swift
-- Localizable.xcstrings
-
-### Phase 2 新增（6 个文件，~530 行）
+### Phase 2 新增（7 个文件，~530 行）
 - Models/KnowledgeModels.swift
 - Services/KnowledgeStore.swift
 - Services/QuestionDetector.swift
@@ -117,13 +108,7 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 - Views/SuggestionPanelView.swift
 - Views/KnowledgeManagementView.swift
 
-### Phase 2 修改（5 个文件）
-- ViewModels/TransFlowViewModel.swift
-- Views/SidebarView.swift
-- Views/MainView.swift
-- Views/ContentView.swift
-- Localizable.xcstrings
-
 ### 当前分支
-- `feature/sentence-editing`（基于之前的开发分支）
-- 未 commit，未 push
+- `feature/sentence-editing`
+- Phase 1 & 2 已 commit (8f061f3)
+- Phase 3 修改待 commit

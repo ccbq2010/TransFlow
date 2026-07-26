@@ -12,6 +12,8 @@ struct SuggestionPanelView: View {
         }
         .frame(width: 320)
         .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 8, x: -2, y: 2)
         .overlay(alignment: .topTrailing) {
             closeButton
         }
@@ -54,7 +56,23 @@ struct SuggestionPanelView: View {
             errorView(error)
         } else if let question = viewModel.lastDetectedQuestion {
             waitingView(question)
+        } else if !AnswerSuggester.isAvailable {
+            unavailableView
         }
+    }
+
+    private var unavailableView: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "cpu")
+                .font(.system(size: 16))
+                .foregroundStyle(.tertiary)
+            Text("suggestion.unavailable")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
     }
 
     private var generatingView: some View {

@@ -86,6 +86,8 @@ struct JSONLContentEntry: Codable {
     var originalText: String
     var translatedText: String?
     let speakerId: String?
+    /// User-assigned display name for the speaker (if renamed during/after session).
+    var speakerName: String?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -94,6 +96,7 @@ struct JSONLContentEntry: Codable {
         case originalText = "original_text"
         case translatedText = "translated_text"
         case speakerId = "speaker_id"
+        case speakerName = "speaker_name"
     }
 
     /// Convenience initializer from a `TranscriptionSentence`.
@@ -104,14 +107,16 @@ struct JSONLContentEntry: Codable {
         self.originalText = sentence.text
         self.translatedText = sentence.translation
         self.speakerId = sentence.speakerId
+        self.speakerName = nil
     }
 
-    init(startTime: String, endTime: String, originalText: String, translatedText: String?, speakerId: String? = nil) {
+    init(startTime: String, endTime: String, originalText: String, translatedText: String?, speakerId: String? = nil, speakerName: String? = nil) {
         self.startTime = startTime
         self.endTime = endTime
         self.originalText = originalText
         self.translatedText = translatedText
         self.speakerId = speakerId
+        self.speakerName = speakerName
     }
 }
 

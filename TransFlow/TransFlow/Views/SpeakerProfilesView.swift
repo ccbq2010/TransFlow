@@ -106,7 +106,6 @@ struct SpeakerProfilesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.name)
                     .font(.system(size: 14, weight: .medium))
-                Text("participants.enrolled_date \(profile.createdAt.formatted(date: .abbreviated, time: .omitted))")
                 Text("\(Text("participants.enrolled_date")): \(profile.createdAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
