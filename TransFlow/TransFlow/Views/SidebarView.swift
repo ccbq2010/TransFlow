@@ -5,6 +5,8 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
     case transcription
     case videoTranscription
     case history
+    case participants
+    case knowledge
     case settings
 
     var id: String { rawValue }
@@ -14,6 +16,8 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .transcription: "sidebar.transcription"
         case .videoTranscription: "sidebar.video_transcription"
         case .history: "sidebar.history"
+        case .participants: "sidebar.participants"
+        case .knowledge: "sidebar.knowledge"
         case .settings: "sidebar.settings"
         }
     }
@@ -23,6 +27,8 @@ enum SidebarDestination: String, CaseIterable, Identifiable {
         case .transcription: "waveform"
         case .videoTranscription: "video"
         case .history: "clock.arrow.circlepath"
+        case .participants: "person.2"
+        case .knowledge: "books.vertical"
         case .settings: "gearshape"
         }
     }

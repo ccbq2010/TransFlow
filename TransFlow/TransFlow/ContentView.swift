@@ -20,10 +20,24 @@ struct ContentView: View {
             }
 
             // ── Middle: Transcription history ──
-            TranscriptionView(
+            HStack(spacing: 0) {
+                TranscriptionView(
                 sentences: viewModel.sentences,
-                isTranslationEnabled: viewModel.translationService.isEnabled
-            )
+                isTranslationEnabled: viewModel.translationService.isEnabled,
+                displayName: viewModel.displayName,
+                onRenameSpeaker: { id, name in
+                    viewModel.renameSpeaker(anonymousId: id, to: name)
+                }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(viewModel.speakerRefreshID)
+
+                if viewModel.answerSuggestion.isPanelVisible {
+                    Divider()
+                    SuggestionPanelView(viewModel: viewModel.answerSuggestion)
+                        .frame(width: 320)
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // ── Bottom: Unified live preview + controls ──

@@ -5,6 +5,8 @@ import SwiftUI
 struct TranscriptionView: View {
     let sentences: [TranscriptionSentence]
     let isTranslationEnabled: Bool
+    var displayName: (String) -> String = { SpeakerDisplayName.displayName(for: $0) }
+    var onRenameSpeaker: ((String, String) -> Void)? = nil
 
     @State private var autoScroll = true
 
@@ -16,7 +18,9 @@ struct TranscriptionView: View {
                         ForEach(sentences) { sentence in
                             SentenceRow(
                                 sentence: sentence,
-                                showTranslation: isTranslationEnabled
+                                showTranslation: isTranslationEnabled,
+                                displayName: displayName,
+                                onRenameSpeaker: onRenameSpeaker
                             )
                         }
                     }
@@ -66,6 +70,11 @@ struct TranscriptionView: View {
 struct SentenceRow: View {
     let sentence: TranscriptionSentence
     let showTranslation: Bool
+    let displayName: (String) -> String
+    var onRenameSpeaker: ((String, String) -> Void)? = nil
+
+    @State private var showingRenameAlert = false
+    @State private var renameText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -89,7 +98,7 @@ struct SentenceRow: View {
 
                 // Speaker badge
                 if let speakerId = sentence.speakerId {
-                    speakerBadge(speakerId)
+                    speakerButton(speakerId)
                 }
 
                 // Text content
@@ -114,9 +123,8 @@ struct SentenceRow: View {
 
     private func speakerBadge(_ speakerId: String) -> some View {
         let colorHex = SpeakerColor.color(for: speakerId)
-        let displayName = SpeakerDisplayName.displayName(for: speakerId)
 
-        return Text(displayName)
+        return Text(displayName(speakerId))
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(Color(hex: colorHex))
             .padding(.horizontal, 6)
@@ -125,5 +133,33 @@ struct SentenceRow: View {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(Color(hex: colorHex).opacity(0.12))
             )
+    }
+
+    private func speakerButton(_ speakerId: String) -> some View {
+        let colorHex = SpeakerColor.color(for: speakerId)
+
+        return Button {
+            renameText = displayName(speakerId)
+            showingRenameAlert = true
+        } label: {
+            Text(displayName(speakerId))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color(hex: colorHex))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color(hex: colorHex).opacity(0.12))
+                )
+        }
+        .buttonStyle(.plain)
+        .help(Text("speaker.rename_help"))
+        .alert(Text("speaker.rename_title"), isPresented: $showingRenameAlert) {
+            TextField("speaker.rename_placeholder", text: $renameText)
+            Button("speaker.rename_confirm") {
+                onRenameSpeaker?(speakerId, renameText)
+            }
+            Button("session.cancel", role: .cancel) {}
+        }
     }
 }

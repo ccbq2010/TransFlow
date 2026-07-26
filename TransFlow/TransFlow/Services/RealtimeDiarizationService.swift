@@ -2,6 +2,19 @@ import Foundation
 import os
 import FluidAudio
 
+// MARK: - Known Speaker Support
+
+extension RealtimeDiarizationService {
+    /// Initialize the diarizer with pre-enrolled known speakers.
+    ///
+    /// Call this after `initialize(models:)` and before `start(onSegments:)`.
+    /// Known speakers will be matched during diarization instead of creating
+    /// new anonymous speaker IDs.
+    func setKnownSpeakers(_ speakers: [Speaker]) {
+        diarizer.initializeKnownSpeakers(speakers)
+    }
+}
+
 /// Wraps FluidAudio's `DiarizerManager` + `AudioStream` for real-time streaming speaker diarization.
 ///
 /// Key parameters:

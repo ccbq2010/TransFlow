@@ -49,6 +49,15 @@ final class TransFlowViewModel {
     /// Active speaker count from the current diarization session.
     var activeSpeakerCount: Int = 0
 
+    /// Speaker name overrides set by the user during/after a session (anonymousId → name).
+    var speakerNameOverrides: [String: String] = [:]
+
+    /// Bumped whenever speakerNameOverrides changes to force SwiftUI re-render.
+    var speakerRefreshID: UUID = UUID()
+
+    /// Answer suggestion coordinator for the knowledge base feature.
+    let answerSuggestion = AnswerSuggestionViewModel()
+
     // MARK: - Private
 
     private let audioCaptureService = AudioCaptureService()
@@ -121,6 +130,8 @@ final class TransFlowViewModel {
         micPermissionGranted = await AudioCaptureService.requestPermission()
         translationService.updateSourceLanguage(from: selectedLanguage)
         DiarizationModelManager.shared.checkStatus()
+        SpeakerProfilesStore.shared.load()
+        KnowledgeStore.shared.load()
         await refreshInstalledLanguages()
         await refreshAvailableApps()
         await modelManager.checkCurrentStatus(for: selectedLanguage)
@@ -458,6 +469,10 @@ final class TransFlowViewModel {
                         let diarizationModels = try await DiarizationModelManager.shared.loadModels()
                         let diarizationService = try RealtimeDiarizationService()
                         diarizationService.initialize(models: diarizationModels)
+                        let knownSpeakers = SpeakerProfilesStore.shared.toFluidAudioSpeakers()
+                        if !knownSpeakers.isEmpty {
+                            diarizationService.setKnownSpeakers(knownSpeakers)
+                        }
                         self.realtimeDiarizationService = diarizationService
                         self.diarizationSegments = []
                         self.activeSpeakerCount = 0
@@ -530,6 +545,10 @@ final class TransFlowViewModel {
                         }
                         sentences.append(sentence)
                         jsonlStore.appendEntry(sentence: sentence)
+                        answerSuggestion.processTranscription(
+                            sentence.text,
+                            fullContext: currentTranscriptionContext()
+                        )
                         currentPartialText = ""
                         partialStartTimestamp = nil
                         translationService.currentPartialTranslation = ""
@@ -624,6 +643,7 @@ final class TransFlowViewModel {
         sentences.removeAll()
         currentPartialText = ""
         translationService.currentPartialTranslation = ""
+        answerSuggestion.reset()
         jsonlStore.createSession(name: name)
     }
 
@@ -753,5 +773,39 @@ final class TransFlowViewModel {
             }
         }
         try? output.write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Speaker Naming
+
+    /// Resolve the display name for a speaker ID, applying user overrides first.
+    func displayName(for speakerId: String) -> String {
+        if let override = speakerNameOverrides[speakerId] {
+            return override
+        }
+        return SpeakerDisplayName.displayName(for: speakerId)
+    }
+
+    /// Build a context string from recent sentences for question answering.
+    private func currentTranscriptionContext() -> String {
+         let recent = sentences.suffix(20)
+         return recent.map { $0.text }.joined(separator: " ")
+     }
+
+    /// Rename a speaker (anonymous or known) for the current session.
+    /// Updates all matching sentences and persists the override.
+    func renameSpeaker(anonymousId: String, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        speakerNameOverrides[anonymousId] = trimmed
+        speakerRefreshID = UUID()
+
+        for i in sentences.indices {
+            if sentences[i].speakerId == anonymousId {
+                sentences[i].speakerId = anonymousId
+            }
+        }
+
+        rewriteJSONLWithCurrentSentences()
     }
 }

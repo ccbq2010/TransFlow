@@ -11,6 +11,8 @@ struct TranscriptionSentence: Identifiable, Sendable {
     var translation: String?
     /// Assigned speaker (e.g. "speaker_0"), nil if diarization disabled or pending
     var speakerId: String?
+    /// Engine confidence score (0.0–1.0). nil if the engine does not provide it.
+    var confidence: Double?
 
     init(
         id: UUID = UUID(),
@@ -18,7 +20,8 @@ struct TranscriptionSentence: Identifiable, Sendable {
         timestamp: Date,
         text: String,
         translation: String? = nil,
-        speakerId: String? = nil
+        speakerId: String? = nil,
+        confidence: Double? = nil
     ) {
         self.id = id
         self.startTimestamp = startTimestamp
@@ -26,6 +29,7 @@ struct TranscriptionSentence: Identifiable, Sendable {
         self.text = text
         self.translation = translation
         self.speakerId = speakerId
+        self.confidence = confidence
     }
 }
 

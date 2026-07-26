@@ -64,6 +64,10 @@ struct MainView: View {
             VideoTranscriptionView()
         case .history:
             HistoryView(initialSessionID: $pendingHistorySessionID)
+        case .participants:
+            SpeakerProfilesView()
+        case .knowledge:
+            KnowledgeManagementView()
         case .settings:
             SettingsView()
         }
