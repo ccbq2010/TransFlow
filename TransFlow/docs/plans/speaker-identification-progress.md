@@ -110,5 +110,6 @@ TransFlow 已有 FluidAudio 实时聚类能力，输出匿名 speaker_0/1/2。�
 
 ### 当前分支
 - `feature/sentence-editing`
-- Phase 1 & 2 已 commit (8f061f3)
-- Phase 3 修改待 commit
+- Phase 1 & 2 已 commit (`8f061f3`)
+- Phase 3 打磨已 commit (`cb08446`)
+- 单元测试已 commit (`007b336`) — 72 tests 全部通过
