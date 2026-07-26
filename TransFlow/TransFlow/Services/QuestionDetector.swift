@@ -35,7 +35,6 @@ struct QuestionDetector {
     }
 
     /// Extract the most recent question from text.
-    /// Looks at the last sentence that ends with a question mark or contains question patterns.
     static func extractLatestQuestion(from text: String) -> String? {
         let sentences = splitIntoSentences(text)
         for sentence in sentences.reversed() {
@@ -61,22 +60,33 @@ struct QuestionDetector {
     }
 
     private static func hasChineseQuestion(_ text: String) -> Bool {
-        // Check for question keywords
         if chineseKeywords.contains(where: { text.contains($0) }) {
             return true
         }
-        // Check for terminal particles (at or near end)
         if let last = text.last {
             return chineseParticles.contains(String(last))
         }
         return false
     }
 
-    /// Split text into sentences by common delimiters.
+    /// Split text into sentences, preserving trailing punctuation.
     private static func splitIntoSentences(_ text: String) -> [String] {
-        let separators = CharacterSet(charactersIn: ".!?。！？\n")
-        return text.components(separatedBy: separators)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        var result: [String] = []
+        var current = ""
+        for char in text {
+            current.append(char)
+            if ".!?。！？\n".contains(char) {
+                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    result.append(trimmed)
+                }
+                current = ""
+            }
+        }
+        let remaining = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !remaining.isEmpty {
+            result.append(remaining)
+        }
+        return result
     }
 }
