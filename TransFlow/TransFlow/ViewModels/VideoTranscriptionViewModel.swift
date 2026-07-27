@@ -225,7 +225,6 @@ final class VideoTranscriptionViewModel {
                 // Step 7: Save to JSONL
                 let metadata = VideoJSONLMetadata(
                     videoFile: fileURL.lastPathComponent,
-                    originalFilePath: fileURL.path,
                     durationSeconds: videoDuration,
                     sourceLanguage: selectedLanguageId,
                     targetLanguage: enableTranslation ? targetLanguage.minimalIdentifier : nil,

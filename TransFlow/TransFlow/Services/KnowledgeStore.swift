@@ -64,15 +64,29 @@ final class KnowledgeStore {
     }
 
     private func saveDocuments() {
-        try? fileManager.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
-        guard let data = try? encoder.encode(documents) else { return }
-        try? data.write(to: documentsURL)
+        do {
+            try fileManager.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+            let data = try encoder.encode(documents)
+            try data.write(to: documentsURL)
+        } catch {
+            ErrorLogger.shared.error(
+                "Failed to save knowledge documents: \(error.localizedDescription)",
+                source: "KnowledgeStore"
+            )
+        }
     }
 
     private func saveChunks() {
-        try? fileManager.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
-        guard let data = try? encoder.encode(chunks) else { return }
-        try? data.write(to: chunksURL)
+        do {
+            try fileManager.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+            let data = try encoder.encode(chunks)
+            try data.write(to: chunksURL)
+        } catch {
+            ErrorLogger.shared.error(
+                "Failed to save knowledge chunks: \(error.localizedDescription)",
+                source: "KnowledgeStore"
+            )
+        }
     }
 
     // MARK: - Import
@@ -127,13 +141,13 @@ final class KnowledgeStore {
 
         var result: [String] = []
         var current = ""
-        let maxWords = 400
+        let maxUnits = 400  // words for space-separated, chars for CJK
 
         for para in paragraphs {
-            let wordCount = para.split(separator: " ").count
+            let wordCount = countUnits(para)
             if current.isEmpty {
                 current = para
-            } else if current.split(separator: " ").count + wordCount <= maxWords {
+            } else if countUnits(current) + wordCount <= maxUnits {
                 current += "\n\n" + para
             } else {
                 result.append(current)
@@ -144,6 +158,20 @@ final class KnowledgeStore {
             result.append(current)
         }
         return result
+    }
+
+    /// Count meaningful units: characters for CJK text, words for space-separated text.
+    private func countUnits(_ text: String) -> Int {
+        let cjkChars = text.unicodeScalars.filter {
+            (0x4E00...0x9FFF).contains($0.value) ||  // CJK Unified
+            (0x3400...0x4DBF).contains($0.value) ||  // CJK Extension A
+            (0x3040...0x309F).contains($0.value) ||  // Hiragana
+            (0x30A0...0x30FF).contains($0.value)     // Katakana
+        }.count
+        if cjkChars > text.count / 2 {
+            return text.count  // CJK: ~1 char ≈ 1 token
+        }
+        return text.split(separator: " ").count
     }
 
     // MARK: - Retrieval

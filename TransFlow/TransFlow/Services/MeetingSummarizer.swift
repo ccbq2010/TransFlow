@@ -122,9 +122,41 @@ final class MeetingSummarizer {
             parts.append("Meeting: \(name)")
         }
         parts.append("\nTranscript:")
-        parts.append(transcript)
+        parts.append(truncateTranscript(transcript))
         parts.append("\nPlease provide a structured summary of this meeting.")
         return parts.joined(separator: "\n")
+    }
+
+    /// Estimate token count: CJK ~1 char/token, others ~4 chars/token.
+    private func estimateTokens(_ text: String) -> Int {
+        let cjkCount = text.unicodeScalars.filter {
+            (0x4E00...0x9FFF).contains($0.value)
+        }.count
+        return cjkCount + (text.count - cjkCount) / 4
+    }
+
+    /// Truncate transcript to fit within token budget, keeping head and tail.
+    private func truncateTranscript(_ transcript: String) -> String {
+        let budget = 4000
+        if estimateTokens(transcript) <= budget {
+            return transcript
+        }
+        let lines = transcript.components(separatedBy: "\n")
+        let keepCount = budget * lines.count / max(1, estimateTokens(transcript))
+        let headCount = max(keepCount * 3 / 10, 10)
+        let tailCount = max(keepCount - headCount, 10)
+        let head = lines.prefix(headCount).joined(separator: "\n")
+        let tail = lines.suffix(tailCount).joined(separator: "\n")
+        let omitted = lines.count - headCount - tailCount
+        return """
+        [Beginning of transcript]
+        \(head)
+        ...
+        [\(omitted) lines omitted]
+        ...
+        \(tail)
+        [End of transcript]
+        """
     }
     #endif
 }

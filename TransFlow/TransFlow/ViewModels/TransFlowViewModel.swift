@@ -416,6 +416,9 @@ final class TransFlowViewModel {
                     stop = capture.stop
 
                 case .systemAudio:
+                    if !AppAudioCaptureService.isScreenRecordingAuthorized {
+                        _ = AppAudioCaptureService.requestScreenRecordingAccess()
+                    }
                     let capture = try await AppAudioCaptureService.startSystemCapture()
                     audioStream = capture.stream
                     stop = capture.stop
@@ -426,6 +429,9 @@ final class TransFlowViewModel {
                         ErrorLogger.shared.log("No app selected for audio capture", source: "AudioCapture")
                         listeningState = .idle
                         return
+                    }
+                    if !AppAudioCaptureService.isScreenRecordingAuthorized {
+                        _ = AppAudioCaptureService.requestScreenRecordingAccess()
                     }
                     let capture = try await AppAudioCaptureService.startCapture(for: target)
                     audioStream = capture.stream
@@ -704,7 +710,11 @@ final class TransFlowViewModel {
         guard let sessionStart = sessionStartTime else { return }
         var changed = false
 
-        for i in sentences.indices where sentences[i].speakerId == nil {
+        // Only backfill recent unassigned sentences to avoid O(n×m) on long sessions
+        let maxBackfill = 50
+        let startIndex = max(0, sentences.count - maxBackfill)
+
+        for i in startIndex..<sentences.count where sentences[i].speakerId == nil {
             let sentStart = sentences[i].startTimestamp.timeIntervalSince(sessionStart)
             let sentEnd = sentences[i].timestamp.timeIntervalSince(sessionStart)
 

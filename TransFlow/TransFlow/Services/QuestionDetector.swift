@@ -60,9 +60,13 @@ struct QuestionDetector {
     }
 
     private static func hasChineseQuestion(_ text: String) -> Bool {
-        if chineseKeywords.contains(where: { text.contains($0) }) {
+        // Require keywords at or near the start of the text to reduce false positives
+        // e.g. "为什么..." → true, "我不知道为什么..." → false
+        let prefix = String(text.prefix(10))
+        if chineseKeywords.contains(where: { prefix.contains($0) }) {
             return true
         }
+        // Sentence-final particles are strong indicators
         if let last = text.last {
             return chineseParticles.contains(String(last))
         }
