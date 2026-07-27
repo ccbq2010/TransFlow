@@ -13,6 +13,9 @@ final class JSONLStore {
     /// Full URL of the current session file.
     private(set) var currentFileURL: URL?
 
+    /// Reusable FileHandle for the current session (avoids repeated open/close).
+    private var writeHandle: FileHandle?
+
     // MARK: - Private
 
     private let fileManager = FileManager.default
@@ -45,6 +48,10 @@ final class JSONLStore {
 
     @discardableResult
     func createSession(name: String? = nil) -> String {
+        // Close any previously open handle
+        writeHandle?.closeFile()
+        writeHandle = nil
+
         let sessionName = name ?? Self.generateDefaultName()
         let fileURL = transcriptionsDirectory.appendingPathComponent("\(sessionName).jsonl")
 
@@ -55,6 +62,11 @@ final class JSONLStore {
 
         currentSessionName = sessionName
         currentFileURL = fileURL
+
+        // Open a reusable handle for subsequent appends
+        writeHandle = try? FileHandle(forWritingTo: fileURL)
+        writeHandle?.seekToEndOfFile()
+
         return sessionName
     }
 
@@ -347,11 +359,7 @@ final class JSONLStore {
 
     private func appendRaw(_ line: String, to fileURL: URL) {
         let data = Data(("\n" + line).utf8)
-        if let handle = try? FileHandle(forWritingTo: fileURL) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            handle.closeFile()
-        }
+        writeHandle?.write(data)
     }
 
     private func ensureDirectoryExists() {

@@ -2,6 +2,7 @@
 @preconcurrency import AVFoundation
 import AppKit
 import CoreMedia
+import CoreGraphics
 
 /// Captures audio from a specific application using ScreenCaptureKit.
 final class AppAudioCaptureService: NSObject, Sendable {
@@ -10,9 +11,34 @@ final class AppAudioCaptureService: NSObject, Sendable {
     static let targetSampleRate: Double = 16_000
     static let targetChannels: AVAudioChannelCount = 1
 
+    /// Whether Screen Recording is currently authorized, checked WITHOUT prompting.
+    /// Use this to decide whether to call ``availableApps()`` / start capture, so the
+    /// system permission dialog is never triggered automatically on launch or UI refresh.
+    static var isScreenRecordingAuthorized: Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    /// Prompt the user for Screen Recording access.
+    /// Call this ONLY from an explicit user action (e.g. a "Grant access" button or when
+    /// the user starts app/system-audio capture) — never automatically on launch/refresh.
+    /// - Returns: whether access is now authorized.
+    @discardableResult
+    static func requestScreenRecordingAccess() -> Bool {
+        CGRequestScreenCaptureAccess()
+        return CGPreflightScreenCaptureAccess()
+    }
+
     /// Fetch available GUI applications that can be captured.
+    ///
+    /// Returns an empty array (without prompting) when Screen Recording permission has not
+    /// been granted, so merely opening the UI never triggers the system permission dialog.
+    /// Call ``requestScreenRecordingAccess()`` from an explicit user action to prompt.
     @MainActor
     static func availableApps() async -> [AppAudioTarget] {
+        guard CGPreflightScreenCaptureAccess() else {
+            // Not authorized — do NOT call SCShareableContent (that would prompt).
+            return []
+        }
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 false, onScreenWindowsOnly: false
@@ -84,6 +110,9 @@ final class AppAudioCaptureService: NSObject, Sendable {
         for target: AppAudioTarget
     ) async throws -> (stream: AsyncStream<AudioChunk>, stop: @Sendable () -> Void) {
         // Find the SCRunningApplication for this target
+        guard CGPreflightScreenCaptureAccess() else {
+            throw CaptureError.notAuthorized
+        }
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: false
         )
@@ -157,6 +186,9 @@ final class AppAudioCaptureService: NSObject, Sendable {
 
     /// Start capturing audio from all applications (system-wide).
     static func startSystemCapture() async throws -> (stream: AsyncStream<AudioChunk>, stop: @Sendable () -> Void) {
+        guard CGPreflightScreenCaptureAccess() else {
+            throw CaptureError.notAuthorized
+        }
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: false
         )
@@ -222,13 +254,16 @@ final class AppAudioCaptureService: NSObject, Sendable {
     enum CaptureError: Error, LocalizedError {
         case appNotFound
         case noDisplay
+        case notAuthorized
 
         var errorDescription: String? {
             switch self {
             case .appNotFound:
-                "Target application not found"
+                String(localized: "capture.error.app_not_found")
             case .noDisplay:
-                "No display available for capture"
+                String(localized: "capture.error.no_display")
+            case .notAuthorized:
+                String(localized: "capture.error.screen_recording_required")
             }
         }
     }

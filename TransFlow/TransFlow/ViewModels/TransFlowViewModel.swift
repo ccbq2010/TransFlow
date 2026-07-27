@@ -367,7 +367,7 @@ final class TransFlowViewModel {
 
                 // Fork audio stream: engine, UI level, recording, and diarization
                 let (engineStream, engineContinuation) = AsyncStream<AudioChunk>.makeStream(
-                    bufferingPolicy: .bufferingNewest(256)
+                    bufferingPolicy: .bufferingOldest(128)  // avoid dropping audio frames
                 )
                 let (levelStream, levelContinuation) = AsyncStream<AudioChunk>.makeStream(
                     bufferingPolicy: .bufferingNewest(64)
@@ -376,7 +376,7 @@ final class TransFlowViewModel {
                     bufferingPolicy: .bufferingNewest(256)
                 )
                 let (diarizationStream, diarizationContinuation) = AsyncStream<AudioChunk>.makeStream(
-                    bufferingPolicy: .bufferingNewest(256)
+                    bufferingPolicy: .bufferingOldest(128)  // avoid dropping audio frames
                 )
 
                 let events: AsyncStream<TranscriptionEvent>

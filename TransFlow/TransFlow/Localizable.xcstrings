@@ -312,6 +312,23 @@
         }
       }
     },
+    "control.grant_screen_recording": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grant Screen Recording Access"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权屏幕录制"
+          }
+        }
+      }
+    },
     "control.pop_up_preview": {
       "extractionState": "manual",
       "localizations": {
@@ -4408,6 +4425,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "AI 总结"
+          }
+        }
+      }
+    },
+    "capture.error.app_not_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Target application not found"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到目标应用"
+          }
+        }
+      }
+    },
+    "capture.error.no_display": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No display available for capture"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有可用的显示器进行捕获"
+          }
+        }
+      }
+    },
+    "capture.error.screen_recording_required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screen Recording permission is required to capture app audio"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要屏幕录制权限才能捕获应用音频"
+          }
+        }
+      }
+    },
+    "whisperkit.error.generic": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperKit error:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperKit 错误："
           }
         }
       }

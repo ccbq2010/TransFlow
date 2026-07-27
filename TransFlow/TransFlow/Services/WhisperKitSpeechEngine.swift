@@ -241,8 +241,8 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                 ErrorLogger.shared.log("Audio stream processing completed", source: "WhisperKitSpeechEngine")
 
             } catch {
-                ErrorLogger.shared.log("WhisperKit error: \(error.localizedDescription)", source: "WhisperKitSpeechEngine")
-                continuation.yield(.error("WhisperKit error: \(error.localizedDescription)"))
+                ErrorLogger.shared.log(String(localized: "whisperkit.error.generic") + " \(error.localizedDescription)", source: "WhisperKitSpeechEngine")
+                continuation.yield(.error(String(localized: "whisperkit.error.generic") + " \(error.localizedDescription)"))
             }
             continuation.finish()
         }

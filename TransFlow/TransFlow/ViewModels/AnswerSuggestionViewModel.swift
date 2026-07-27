@@ -54,7 +54,7 @@ final class AnswerSuggestionViewModel {
         Task {
             do {
                 // Offload CPU-intensive embedding search to background
-                let chunks = await MainActor.run { self.knowledgeStore.chunks }
+                let chunks = knowledgeStore.chunks  // already on @MainActor
                 let relevantChunks = await Task.detached {
                     self.knowledgeStore.retrieveTopK(for: question.text, chunks: chunks, k: 3)
                 }.value
