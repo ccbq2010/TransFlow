@@ -48,8 +48,15 @@ final class SpeakerProfilesStore {
     }
 
     private func save() {
-        guard let data = try? encoder.encode(profiles) else { return }
-        try? data.write(to: storageURL)
+        do {
+            let data = try encoder.encode(profiles)
+            try data.write(to: storageURL)
+        } catch {
+            ErrorLogger.shared.error(
+                "Failed to save speaker profiles: \(error.localizedDescription)",
+                source: "SpeakerProfilesStore"
+            )
+        }
     }
 
     // MARK: - CRUD

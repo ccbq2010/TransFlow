@@ -51,20 +51,30 @@ final class AnswerSuggestionViewModel {
         isGenerating = true
         errorMessage = nil
 
-        Task { @MainActor in
+        Task {
             do {
-                let relevantChunks = knowledgeStore.retrieveTopK(question.text, k: 3)
+                // Offload CPU-intensive embedding search to background
+                let chunks = await MainActor.run { self.knowledgeStore.chunks }
+                let relevantChunks = await Task.detached {
+                    self.knowledgeStore.retrieveTopK(for: question.text, chunks: chunks, k: 3)
+                }.value
                 let suggestion = try await suggester.suggestAnswer(
                     for: question.text,
                     context: question.context,
                     knowledgeChunks: relevantChunks
                 )
-                currentSuggestion = suggestion
-                isPanelVisible = true
+                await MainActor.run {
+                    currentSuggestion = suggestion
+                    isPanelVisible = true
+                }
             } catch {
-                errorMessage = error.localizedDescription
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                }
             }
-            isGenerating = false
+            await MainActor.run {
+                isGenerating = false
+            }
         }
     }
 

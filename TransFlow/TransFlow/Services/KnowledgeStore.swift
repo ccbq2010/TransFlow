@@ -177,7 +177,7 @@ final class KnowledgeStore {
     // MARK: - Retrieval
 
     /// Find the top-K most relevant chunks for a query string using NLEmbedding.
-    func retrieveTopK(_ query: String, k: Int = 3) -> [KnowledgeChunk] {
+    nonisolated func retrieveTopK(for query: String, chunks: [KnowledgeChunk], k: Int = 3) -> [KnowledgeChunk] {
         guard let embedding = Self.currentEmbedding, !chunks.isEmpty else {
             return []
         }
@@ -193,7 +193,7 @@ final class KnowledgeStore {
     }
 
     /// Get the best available sentence embedding, preferring the current language.
-    private static var currentEmbedding: NLEmbedding? {
+    private nonisolated(unsafe) static var currentEmbedding: NLEmbedding? {
         let language = Locale.current.language.languageCode?.identifier ?? "en"
         if let embedding = NLEmbedding.sentenceEmbedding(for: NLLanguage(rawValue: language)) {
             return embedding

@@ -229,7 +229,7 @@ final class TranslationService {
     func resumeSession() {
         guard isEnabled, sourceLanguage != nil else { return }
         ErrorLogger.shared.log("Resuming translation session (view appeared)", source: "Translation")
-        updateConfiguration()
+        updateConfiguration(force: true)
     }
 
     /// Cancel all in-flight translation tasks.

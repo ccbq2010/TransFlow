@@ -320,7 +320,12 @@ final class JSONLStore {
                     deleted += 1
                 }
             }
-        } catch {}
+        } catch {
+            ErrorLogger.shared.error(
+                "Failed to delete all sessions: \(error.localizedDescription)",
+                source: "JSONLStore"
+            )
+        }
         return deleted
     }
 
