@@ -515,6 +515,12 @@ struct SessionDetailView: View {
     /// Draft text for the entry being edited. Kept separate from `entries` so ESC can revert.
     @State private var editingDraft: String = ""
 
+    /// Summary state for AI-generated meeting summary.
+    @State private var showingSummary = false
+    @State private var summaryText: String?
+    @State private var isGeneratingSummary = false
+    @State private var summaryError: String?
+
     private var hasRecording: Bool { session.hasRecording }
 
     var body: some View {
@@ -807,6 +813,19 @@ struct SessionDetailView: View {
 
             previewModeToggle
 
+            Button {
+                Task { await generateSummary() }
+            } label: {
+                if isGeneratingSummary {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Label("summary.button", systemImage: "text.textformat")
+                }
+            }
+            .disabled(entries.isEmpty || isGeneratingSummary)
+            .help(Text("summary.button"))
+
             Menu {
                 ForEach(ExportFormat.allCases) { format in
                     Button {
@@ -924,6 +943,32 @@ struct SessionDetailView: View {
         let m = totalSeconds / 60
         let s = totalSeconds % 60
         return String(format: "%d:%02d", m, s)
+    }
+
+    // MARK: - AI Summary
+
+    private func generateSummary() async {
+        isGeneratingSummary = true
+        summaryError = nil
+        do {
+            let summarizer = MeetingSummarizer()
+            let result = try await summarizer.summarize(entries: entries, sessionName: session.name)
+            summaryText = result
+            showingSummary = true
+        } catch {
+            summaryError = error.localizedDescription
+        }
+        isGeneratingSummary = false
+    }
+}
+
+private struct SummarySheet: View {
+    let summary: String
+    let sessionName: String?
+    let onDismiss: () -> Void
+
+    var body: some View {
+        SummaryPanelView(summary: summary, sessionName: sessionName, onDismiss: onDismiss)
     }
 }
 
