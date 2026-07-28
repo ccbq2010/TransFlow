@@ -679,12 +679,17 @@ final class TransFlowViewModel {
         activeSpeakerCount = 0
         sessionStartTime = nil
 
+        // P1-1 修复：取消引擎内部处理 Task，防止资源泄漏
+        if let engine = speechEngine as? WhisperKitSpeechEngine {
+            engine.stop()
+        }
         stopAudioCapture?()
         stopAudioCapture = nil
         audioLevelTask?.cancel()
         audioLevelTask = nil
         listeningTask?.cancel()
         listeningTask = nil
+        speechEngine = nil
 
         listeningState = .idle
         audioLevel = 0

@@ -33,6 +33,10 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
     private let slideSeconds: Double
     private static let sampleRate = 16000
 
+    /// P1-1 修复：存储 processStream 内部的 Task，使 stop() 能够取消它，
+    /// 防止快速重启时旧引擎的 Task 泄漏运行。
+    nonisolated(unsafe) private var processingTask: Task<Void, Never>?
+
     /// 初始化
     /// - Parameters:
     ///   - locale: 语言区域（用于选择 Whisper 模型的语言参数）
@@ -61,7 +65,8 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
             bufferingPolicy: .bufferingNewest(128)
         )
 
-        Task {
+        // P1-1 修复：存储 Task 引用，使 stop() 能取消内部处理
+        processingTask = Task {
             do {
                 // 1. 初始化 WhisperKit（加载逻辑见 loadWhisperKit，含 90s ANE 编译硬超时）
                 let whisperKit = try await loadWhisperKit()
@@ -124,9 +129,18 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                         await prev?.value  // 等前一个转写完成
 
                         do {
-                            // VAD 过滤：提取语音段，去除静音
-                            let speechSamples = vadService.extractSpeech(window)
-                            let audioToTranscribe = speechSamples.isEmpty ? window : speechSamples
+                            // P0-4 修复：VAD 过滤并提取偏移映射，
+                            // 避免 VAD 拼接后 segment 时间戳相对于拼接音频而非原始窗口导致漂移
+                            let (speechSamples, originalOffsets, concatDurations) = vadService.extractSpeechWithOffsets(window)
+                            let audioToTranscribe: [Float]
+                            let useVAD: Bool
+                            if speechSamples.isEmpty {
+                                audioToTranscribe = window
+                                useVAD = false
+                            } else {
+                                audioToTranscribe = speechSamples
+                                useVAD = true
+                            }
 
                             let decodeOptions = buildDecodeOptions(
                                 languageCode: languageCode,
@@ -142,17 +156,30 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                             guard let result = results.first else { return }
                             let segments = result.segments
 
-                            for segment in segments {
+                            // P0-4：当 VAD 启用时，构建查找表将拼接后音频中的时间
+                            // 映射回原始窗口中的时间
+                            let vadOffsetLookup = useVAD ? Self.buildVADOffsetLookup(
+                                originalOffsets: originalOffsets,
+                                concatenatedDurations: concatDurations
+                            ) : nil
+
+                            for (segIdx, segment) in segments.enumerated() {
                                 let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !text.isEmpty else { continue }
 
-                                // S1 修复：通过 actor 安全地检查和更新 lastCommittedEndSec
-                                let shouldCommit = await state.shouldCommit(endingAt: Double(segment.end))
-                                guard shouldCommit else { continue }
+                                // P0-1 + P0-4：用绝对时间做去重，
+                                // VAD 启用时加上该段在原始窗口中的偏移补偿
+                                let vadOffsetSec = vadOffsetLookup?(Double(segment.start)) ?? 0
+                                let startDate = windowStartWallTime.addingTimeInterval(
+                                    Double(segment.start) + vadOffsetSec
+                                )
+                                let endDate = windowStartWallTime.addingTimeInterval(
+                                    Double(segment.end) + vadOffsetSec
+                                )
+                                let absEnd = endDate.timeIntervalSince1970
 
-                                // Bug 1.1 修复：时间戳 = 墙钟锚点 + segment 相对时间
-                                let startDate = windowStartWallTime.addingTimeInterval(Double(segment.start))
-                                let endDate = windowStartWallTime.addingTimeInterval(Double(segment.end))
+                                let shouldCommit = await state.shouldCommit(endingAt: absEnd)
+                                guard shouldCommit else { continue }
 
                                 continuation.yield(.sentenceComplete(
                                     TranscriptionSentence(
@@ -183,9 +210,17 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                     await transcribeChain?.value
 
                     do {
-                        // VAD 过滤尾部音频
-                        let speechSamples = vadService.extractSpeech(remainingWindow)
-                        let audioToTranscribe = speechSamples.isEmpty ? remainingWindow : speechSamples
+                        // P0-4 修复：VAD 过滤并提取偏移映射
+                        let (speechSamples, originalOffsets, concatDurations) = vadService.extractSpeechWithOffsets(remainingWindow)
+                        let audioToTranscribe: [Float]
+                        let useVAD: Bool
+                        if speechSamples.isEmpty {
+                            audioToTranscribe = remainingWindow
+                            useVAD = false
+                        } else {
+                            audioToTranscribe = speechSamples
+                            useVAD = true
+                        }
 
                         let decodeOptions = buildDecodeOptions(
                             languageCode: languageCode,
@@ -200,15 +235,26 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
 
                         if let result = results.first {
                             let segments = result.segments
-                            for segment in segments {
+                            let vadOffsetLookup = useVAD ? Self.buildVADOffsetLookup(
+                                originalOffsets: originalOffsets,
+                                concatenatedDurations: concatDurations
+                            ) : nil
+
+                            for (segIdx, segment) in segments.enumerated() {
                                 let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
                                 guard !text.isEmpty else { continue }
 
-                                let shouldCommit = await state.shouldCommit(endingAt: Double(segment.end))
-                                guard shouldCommit else { continue }
+                                let vadOffsetSec = vadOffsetLookup?(Double(segment.start)) ?? 0
+                                let startDate = windowStartWallTime.addingTimeInterval(
+                                    Double(segment.start) + vadOffsetSec
+                                )
+                                let endDate = windowStartWallTime.addingTimeInterval(
+                                    Double(segment.end) + vadOffsetSec
+                                )
+                                let absEnd = endDate.timeIntervalSince1970
 
-                                let startDate = windowStartWallTime.addingTimeInterval(Double(segment.start))
-                                let endDate = windowStartWallTime.addingTimeInterval(Double(segment.end))
+                                let shouldCommit = await state.shouldCommit(endingAt: absEnd)
+                                guard shouldCommit else { continue }
 
                                 continuation.yield(.sentenceComplete(
                                     TranscriptionSentence(
@@ -243,6 +289,62 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
         }
 
         return events
+    }
+
+    /// P1-1 修复：取消 processStream 内部的处理 Task，防止快速重启时旧引擎泄漏。
+    /// 调用方（TransFlowViewModel）在 stopListening 时调用。
+    func stop() {
+        processingTask?.cancel()
+        processingTask = nil
+    }
+
+    // MARK: - VAD Time Offset Compensation (P0-4)
+
+    /// P0-4 修复：构建 VAD 偏移查找函数。
+    ///
+    /// VAD 将多个语音段拼接为连续数组。WhisperKit 对拼接后音频返回的 segment.start/end
+    /// 是相对于拼接后音频的时间戳。本方法构建一个查找函数，将拼接后音频中的时间戳
+    /// 映射为该时间点在原始窗口中的偏移量（秒）。
+    ///
+    /// 映射逻辑：
+    /// - 拼接后音频 = [vad0 | vad1 | vad2 | ...]
+    /// - vad_i 在拼接后音频中从 concatStart[i] 开始，持续 concatDurations[i] 秒
+    /// - 对于拼接后时间 t，找到所属的 vad 段 i
+    /// - 原始偏移 = originalOffsets[i] + (t - concatStart[i])
+    ///
+    /// - Parameters:
+    ///   - originalOffsets: 每段在原始音频中的起始偏移（秒）
+    ///   - concatenatedDurations: 每段在拼接后音频中的时长（秒）
+    /// - Returns: 闭包，输入拼接后音频中的时间戳（秒），返回在原始窗口中的偏移（秒）
+    private static func buildVADOffsetLookup(
+        originalOffsets: [Double],
+        concatenatedDurations: [Double]
+    ) -> (Double) -> Double {
+        // 构建每段在拼接后音频中的起始时间
+        var concatStarts: [Double] = []
+        var cumulative: Double = 0
+        for duration in concatenatedDurations {
+            concatStarts.append(cumulative)
+            cumulative += duration
+        }
+
+        return { concatenatedTime in
+            guard !concatStarts.isEmpty else { return 0 }
+
+            // 找到 concatenatedTime 属于哪个 VAD 段
+            var vadIdx = 0
+            for i in 0..<concatStarts.count {
+                if concatenatedTime >= concatStarts[i] {
+                    vadIdx = i
+                } else {
+                    break
+                }
+            }
+
+            // 原始偏移 = 该段在原始音频中的起始 + 在该段内的偏移
+            let offsetInSegment = concatenatedTime - concatStarts[vadIdx]
+            return originalOffsets[vadIdx] + offsetInSegment
+        }
     }
 
     // MARK: - Model Loading
@@ -443,10 +545,13 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
 // MARK: - TranscriptionState (S1: actor 保护跨 Task 共享状态)
 
 private actor TranscriptionState {
+    /// P0-1 修复：存储绝对时间戳（Date.timeIntervalSince1970），
+    /// 而非窗口内相对时间，确保滑动窗口间去重正确。
     var lastCommittedEndSec: Double = 0
 
     /// 检查 segment 是否应该被提交（去重）。
-    /// 返回 true 表示该 segment 未被提交过，已更新 lastCommittedEndSec。
+    /// - Parameter end: segment 结束的绝对时间戳（秒，自 1970 起）
+    /// - Returns: true 表示该 segment 未被提交过，已更新 lastCommittedEndSec。
     func shouldCommit(endingAt end: Double) -> Bool {
         guard end > lastCommittedEndSec else { return false }
         lastCommittedEndSec = end
