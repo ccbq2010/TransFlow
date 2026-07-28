@@ -126,6 +126,20 @@ final class AppSettings {
         }
     }
 
+    /// WhisperKit 滑动窗口长度（秒）。参考 WhisperStreaming 原版推荐 30s，过短会显著拉高 WER。
+    var whisperWindowSeconds: Double {
+        didSet {
+            UserDefaults.standard.set(whisperWindowSeconds, forKey: "whisperWindowSeconds")
+        }
+    }
+
+    /// WhisperKit 滑动窗口重叠步长（秒）。参考原版推荐 5s，过小易丢句、过大易重复。
+    var whisperSlideSeconds: Double {
+        didSet {
+            UserDefaults.standard.set(whisperSlideSeconds, forKey: "whisperSlideSeconds")
+        }
+    }
+
     /// The user-chosen appearance mode.
     var appAppearance: AppAppearance {
         didSet {
@@ -191,6 +205,9 @@ final class AppSettings {
         let storedEngine = UserDefaults.standard.string(forKey: "transcriptionEngine") ?? "apple"
         self.transcriptionEngine = TranscriptionEngine(rawValue: storedEngine) ?? .appleSpeech
 
+        self.whisperWindowSeconds = UserDefaults.standard.object(forKey: "whisperWindowSeconds") as? Double ?? 30.0
+        self.whisperSlideSeconds = UserDefaults.standard.object(forKey: "whisperSlideSeconds") as? Double ?? 5.0
+
         let storedAppearance = UserDefaults.standard.string(forKey: "appAppearance") ?? "system"
         self.appAppearance = AppAppearance(rawValue: storedAppearance) ?? .system
 
@@ -205,6 +222,15 @@ final class AppSettings {
         self.diarizationSensitivity = UserDefaults.standard.object(forKey: "diarizationSensitivity") as? Double ?? 0.8
         self.liveEnableDiarization = UserDefaults.standard.object(forKey: "liveEnableDiarization") as? Bool ?? false
         self.hotwords = UserDefaults.standard.stringArray(forKey: "hotwords") ?? []
+
+        if let data = UserDefaults.standard.data(forKey: "cloudASR"),
+           let cfg = try? JSONDecoder().decode(CloudASRConfig.self, from: data) {
+            self.cloudASR = cfg
+        } else {
+            self.cloudASR = CloudASRConfig.default
+        }
+
+        self.selectedInputDeviceUID = UserDefaults.standard.string(forKey: "selectedInputDeviceUID")
 
         self.videoSourceLanguage = UserDefaults.standard.string(forKey: "videoSourceLanguage") ?? "en"
         self.videoEnableTranslation = UserDefaults.standard.bool(forKey: "videoEnableTranslation")
@@ -263,6 +289,40 @@ final class AppSettings {
     var hotwords: [String] {
         didSet {
             UserDefaults.standard.set(hotwords, forKey: "hotwords")
+        }
+    }
+
+    // MARK: - Cloud ASR (Scheme A hybrid correction)
+
+    /// Optional cloud ASR correction layer configuration (Scheme A).
+    /// Persisted as a single JSON blob so the struct can grow new fields freely.
+    var cloudASR: CloudASRConfig {
+        didSet { saveCloudASR() }
+    }
+
+    private func saveCloudASR() {
+        if let data = try? JSONEncoder().encode(cloudASR) {
+            UserDefaults.standard.set(data, forKey: "cloudASR")
+        }
+    }
+
+    // MARK: - Audio Input Device
+
+    /// Stable UID of the audio input device TransFlow should record from, or `nil`
+    /// to follow the macOS system default. Persisted across launches.
+    ///
+    /// When non-nil, `AudioCaptureService` binds the engine's input node to this
+    /// device via `kAudioOutputUnitProperty_CurrentDevice` so the app is no longer
+    /// at the mercy of the system-level default (e.g. if the user has routed
+    /// system audio into BlackHole 2ch for a video call, this lets them keep
+    /// BlackHole as system default while still recording from the real mic).
+    var selectedInputDeviceUID: String? {
+        didSet {
+            if let uid = selectedInputDeviceUID, !uid.isEmpty {
+                UserDefaults.standard.set(uid, forKey: "selectedInputDeviceUID")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "selectedInputDeviceUID")
+            }
         }
     }
 

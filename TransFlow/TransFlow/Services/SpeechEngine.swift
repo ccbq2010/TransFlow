@@ -39,18 +39,29 @@ final class SpeechEngine: TranscriptionEngineProtocol {
                 let transcriber = SpeechTranscriber(
                     locale: supportedLocale,
                     transcriptionOptions: [],
-                    reportingOptions: [.fastResults, .volatileResults],
+                    // NOTE: intentionally NOT using `.fastResults` here.
+                    // `.fastResults` trades recognition accuracy for latency — it emits
+                    // results as early as possible, which is exactly what hurts
+                    // recognition quality for a transcription app. Keeping only
+                    // `.volatileResults` lets the analyzer use fuller context for
+                    // more accurate (if slightly later) final results, while still
+                    // giving live partial captions.
+                    reportingOptions: [.volatileResults],
                     attributeOptions: []
                 )
 
                 let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
                     compatibleWith: [transcriber]
                 )
+                // Fall back to an explicit 16kHz mono format when the system returns nil,
+                // so prepareToAnalyze and the buffers we feed are guaranteed to match.
+                let effectiveFormat = analyzerFormat
+                    ?? AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
 
                 let analyzer = SpeechAnalyzer(modules: [transcriber])
-                try await analyzer.prepareToAnalyze(in: analyzerFormat)
+                try await analyzer.prepareToAnalyze(in: effectiveFormat)
                 ErrorLogger.shared.log(
-                    "processStream: analyzer prepared (format: \(analyzerFormat?.description ?? "default"))",
+                    "processStream: analyzer prepared (format: \(effectiveFormat.description))",
                     source: "SpeechEngine"
                 )
 
@@ -152,7 +163,16 @@ final class SpeechEngine: TranscriptionEngineProtocol {
 
                 inputBuilder.finish()
                 try await analyzer.finalizeAndFinishThroughEndOfInput()
-                resultTask.cancel()
+                // 排空结果流而不是立刻 cancel：finalize 之后仍可能有最终句在
+                // results 流中未被消费，立刻 cancel 会把说话的结尾丢掉。
+                // finalizeAndFinishThroughEndOfInput 保证 results 流会终止，
+                // 这里加一个 5 秒兜底避免极端情况下挂起。
+                let drainDeadline = Task {
+                    try? await Task.sleep(for: .seconds(5))
+                    resultTask.cancel()
+                }
+                _ = await resultTask.value
+                drainDeadline.cancel()
                 ErrorLogger.shared.log(
                     "processStream: finalized for locale \(locale.identifier)",
                     source: "SpeechEngine"
@@ -183,9 +203,16 @@ final class SpeechEngine: TranscriptionEngineProtocol {
         guard let pcmBuffer = createPCMBuffer(from: samples) else { return nil }
 
         if let converter, let reusableBuffer {
+            // Capacity must cover THIS batch's actual sample count, not a fixed
+            // 250ms estimate — chunk sizes from the capture tap vary with the
+            // input device (e.g. AirPods @24kHz produce ~2731-sample chunks, so
+            // an accumulated batch can far exceed 0.25s worth of samples).
+            // Truncating here silently drops audio and destroys accuracy.
+            let ratio = reusableBuffer.format.sampleRate / 16_000
+            let requiredCapacity = AVAudioFrameCount(Double(samples.count) * ratio) + 64
             let outputBuffer = AVAudioPCMBuffer(
                 pcmFormat: reusableBuffer.format,
-                frameCapacity: reusableBuffer.frameCapacity
+                frameCapacity: max(requiredCapacity, reusableBuffer.frameCapacity)
             )!
             outputBuffer.frameLength = 0
             var error: NSError?

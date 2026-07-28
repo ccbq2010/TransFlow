@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var isManagingSpeechLanguages = false
     @State private var isManagingTranslationLanguages = false
     @State private var translationDownloadConfig: TranslationSession.Configuration?
+    @StateObject private var inputDeviceManager = InputDeviceManager.shared
 
     var body: some View {
         ScrollView {
@@ -40,6 +41,29 @@ struct SettingsView: View {
                     hotwordsRow
                     Divider().padding(.leading, 46)
                     whisperKitModelRow
+                    Divider().padding(.leading, 46)
+                    inputDeviceRow
+                }
+
+                // ── Cloud ASR Section (Scheme A) ──
+                settingsSection(
+                    header: "cloud_asr.title",
+                    icon: "cloud.fill",
+                    iconColor: .blue
+                ) {
+                    cloudASREnableRow
+                    if settings.cloudASR.enabled {
+                        Divider().padding(.leading, 46)
+                        cloudASRProviderRow
+                        Divider().padding(.leading, 46)
+                        cloudASRApiKeyRow
+                        Divider().padding(.leading, 46)
+                        cloudASRModelRow
+                        Divider().padding(.leading, 46)
+                        cloudASRBaseURLRow
+                        Divider().padding(.leading, 46)
+                        cloudASRNoteRow
+                    }
                 }
 
                 // ── Hotkeys Section ──
@@ -308,6 +332,263 @@ struct SettingsView: View {
         case .appleSpeech: "engine.apple_speech.description"
         case .whisperKit: "engine.whisper_kit.description"
         }
+    }
+
+    // MARK: - Input Device Row
+
+    /// Picker for which CoreAudio input device to record from. "System Default" follows
+    /// whatever the user picked in System Settings; selecting a specific device here
+    /// overrides that and rebinds the engine's input node on the next capture start.
+    private var inputDeviceRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("audio.input.title")
+                        .font(.system(size: 13, weight: .regular))
+                    Text(inputDeviceSubtitle)
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } icon: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.pink)
+                    .frame(width: 24)
+            }
+
+            Spacer()
+
+            Menu {
+                Button {
+                    settings.selectedInputDeviceUID = nil
+                } label: {
+                    Label {
+                        Text("audio.input.system_default")
+                    } icon: {
+                        if settings.selectedInputDeviceUID == nil {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+                if !inputDeviceManager.devices.isEmpty {
+                    Divider()
+                }
+                ForEach(inputDeviceManager.devices) { dev in
+                    Button {
+                        settings.selectedInputDeviceUID = dev.uid
+                    } label: {
+                        Label {
+                            HStack {
+                                Text(dev.name)
+                                if dev.isVirtual {
+                                    Text("·").foregroundStyle(.tertiary)
+                                    Text("audio.input.virtual").foregroundStyle(.tertiary)
+                                }
+                            }
+                        } icon: {
+                            if dev.uid == settings.selectedInputDeviceUID {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(inputDeviceSelectedLabel)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Button {
+                inputDeviceManager.refresh()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(Text("audio.input.refresh"))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .onAppear { inputDeviceManager.refresh() }
+    }
+
+    private var inputDeviceSelectedLabel: String {
+        let selected = settings.selectedInputDeviceUID
+        if let selected, let dev = inputDeviceManager.devices.first(where: { $0.uid == selected }) {
+            return dev.name
+        }
+        // Either "System Default" or the previously-picked device is gone — show default's name.
+        if let defUID = inputDeviceManager.systemDefaultUID,
+           let def = inputDeviceManager.devices.first(where: { $0.uid == defUID }) {
+            return def.name
+        }
+        return String(localized: "audio.input.system_default")
+    }
+
+    private var inputDeviceSubtitle: LocalizedStringKey {
+        let selected = settings.selectedInputDeviceUID
+        if let selected, !selected.isEmpty,
+           let dev = inputDeviceManager.devices.first(where: { $0.uid == selected }) {
+            if dev.isVirtual {
+                return "audio.input.subtitle.virtual"
+            } else {
+                return "audio.input.subtitle.specific"
+            }
+        }
+        return "audio.input.subtitle.system_default"
+    }
+
+    // MARK: - Cloud ASR Rows (Scheme A)
+
+    private var cloudASREnableRow: some View {
+        HStack {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("cloud_asr.enable")
+                        .font(.system(size: 13, weight: .regular))
+                    Text("cloud_asr.enable.description")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "waveform.circle.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.blue)
+                    .frame(width: 24)
+            }
+            Spacer()
+            Toggle("", isOn: $settings.cloudASR.enabled)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .tint(.accentColor)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var cloudASRProviderRow: some View {
+        HStack {
+            Label {
+                Text("cloud_asr.provider")
+                    .font(.system(size: 13, weight: .regular))
+            } icon: {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.blue)
+                    .frame(width: 24)
+            }
+            Spacer()
+            Picker("", selection: $settings.cloudASR.provider) {
+                ForEach(CloudASRProvider.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+            .tint(.secondary)
+            .onChange(of: settings.cloudASR.provider) { newProvider in
+                // Adopt the preset's defaults when switching away from a custom endpoint.
+                if newProvider != .custom {
+                    settings.cloudASR.baseURL = newProvider.defaultBaseURL
+                    settings.cloudASR.model = newProvider.defaultModel
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var cloudASRApiKeyRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label {
+                    Text("cloud_asr.api_key")
+                        .font(.system(size: 13, weight: .regular))
+                } icon: {
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.blue)
+                        .frame(width: 24)
+                }
+                Spacer()
+            }
+            SecureField("cloud_asr.api_key.placeholder", text: $settings.cloudASR.apiKey)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12, design: .monospaced))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var cloudASRModelRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label {
+                    Text("cloud_asr.model")
+                        .font(.system(size: 13, weight: .regular))
+                } icon: {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.blue)
+                        .frame(width: 24)
+                }
+                Spacer()
+            }
+            TextField("cloud_asr.model.placeholder", text: $settings.cloudASR.model)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12, design: .monospaced))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var cloudASRBaseURLRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label {
+                    Text("cloud_asr.base_url")
+                        .font(.system(size: 13, weight: .regular))
+                } icon: {
+                    Image(systemName: "link")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.blue)
+                        .frame(width: 24)
+                }
+                Spacer()
+            }
+            TextField("cloud_asr.base_url.placeholder", text: $settings.cloudASR.baseURL)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12, design: .monospaced))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private var cloudASRNoteRow: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+            Text("cloud_asr.note")
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     // MARK: - Hotwords Row

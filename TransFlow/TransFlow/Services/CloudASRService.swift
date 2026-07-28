@@ -1,0 +1,155 @@
+import Foundation
+
+/// OpenAI-compatible cloud ASR client (SiliconFlow TeleSpeechASR / Whisper, etc.).
+///
+/// Ported from the VOX project's `CloudRecognizer` and adapted for Swift 6 strict
+/// concurrency. Builds a 16-bit PCM WAV from Float32 samples and POSTs a
+/// multipart/form-data body to `<baseURL>` with `model` + `file` fields, mirroring
+/// the VOX API contract.
+struct CloudASRService: CloudASRServiceProtocol {
+    let config: CloudASRConfig
+    private let session: URLSession
+
+    init(config: CloudASRConfig) {
+        self.config = config
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = config.timeout
+        cfg.timeoutIntervalForResource = config.timeout
+        cfg.waitsForConnectivity = false
+        self.session = URLSession(configuration: cfg)
+    }
+
+    func transcribe(samples: [Float], sampleRate: Double = 16_000) async -> String? {
+        guard !samples.isEmpty else { return nil }
+        let wav = Self.buildWav(samples: samples, sampleRate: sampleRate)
+        return await transcribe(wavData: wav)
+    }
+
+    func transcribe(wavData: Data) async -> String? {
+        guard config.isConfigured, !wavData.isEmpty else { return nil }
+
+        // Long-audio safety net: chunk and join (VOX chunks at 7s to stay under timeout).
+        let bytesPerSecond = 16_000 * 2
+        let maxChunkBytes = Int(config.chunkSeconds) * bytesPerSecond
+        if wavData.count > maxChunkBytes + 44 {
+            return await transcribeChunked(wav: wavData, maxChunkBytes: maxChunkBytes)
+        }
+        return await post(wavData: wavData)
+    }
+
+    // MARK: - Networking
+
+    private func post(wavData: Data) async -> String? {
+        guard let url = URL(string: config.baseURL) else { return nil }
+
+        let boundary = "transflow-\(UUID().uuidString.prefix(8))"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(config.model)\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("TransFlow", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = config.timeout
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                ErrorLogger.shared.log("Cloud ASR: no HTTP response", source: "CloudASR")
+                return nil
+            }
+            if http.statusCode != 200 {
+                ErrorLogger.shared.log("Cloud ASR failed: HTTP \(http.statusCode)", source: "CloudASR")
+                return nil
+            }
+            return Self.parseText(from: data)
+        } catch {
+            ErrorLogger.shared.log("Cloud ASR network error: \(error.localizedDescription)", source: "CloudASR")
+            return nil
+        }
+    }
+
+    private func transcribeChunked(wav: Data, maxChunkBytes: Int) async -> String? {
+        let pcm = Array(wav.dropFirst(44))
+        var chunks: [Data] = []
+        var offset = 0
+        while offset < pcm.count {
+            let end = min(offset + maxChunkBytes, pcm.count)
+            let chunkPCM = Data(pcm[offset..<end])
+            var chunkWav = Self.buildWavHeader(pcmSize: UInt32(chunkPCM.count), sampleRate: 16_000)
+            chunkWav.append(chunkPCM)
+            chunks.append(chunkWav)
+            offset = end
+        }
+        let results = await withTaskGroup(of: String?.self) { group -> [String] in
+            for chunk in chunks {
+                group.addTask { await self.post(wavData: chunk) }
+            }
+            var out: [String] = []
+            for await r in group {
+                if let r, !r.isEmpty { out.append(r) }
+            }
+            return out
+        }
+        return results.isEmpty ? nil : results.joined(separator: " ")
+    }
+
+    // MARK: - Parsing
+
+    private static func parseText(from data: Data) -> String? {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let text = json["text"] as? String, !text.isEmpty {
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Some endpoints return a bare JSON string rather than {"text": ...}
+        if let s = String(data: data, encoding: .utf8) {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.count > 1, !trimmed.hasPrefix("{") {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
+    // MARK: - WAV encoding (16-bit PCM mono)
+
+    /// Build a complete 16-bit PCM mono WAV from Float32 samples in [-1, 1].
+    static func buildWav(samples: [Float], sampleRate: Double = 16_000) -> Data {
+        let ints = samples.map { s -> Int16 in
+            let clamped = max(-1.0, min(1.0, s))
+            return Int16(clamped * 32_767)
+        }
+        let pcm = ints.withUnsafeBytes { Data($0) }
+        var header = Self.buildWavHeader(pcmSize: UInt32(pcm.count), sampleRate: sampleRate)
+        header.append(pcm)
+        return header
+    }
+
+    private static func buildWavHeader(pcmSize: UInt32, sampleRate: Double) -> Data {
+        var h = Data()
+        h.append("RIFF".data(using: .ascii)!)
+        h.append(withUnsafeBytes(of: UInt32(pcmSize + 36).littleEndian) { Data($0) })
+        h.append("WAVE".data(using: .ascii)!)
+        h.append("fmt ".data(using: .ascii)!)
+        h.append(withUnsafeBytes(of: UInt32(16)) { Data($0) })
+        h.append(withUnsafeBytes(of: UInt16(1)) { Data($0) }) // PCM
+        h.append(withUnsafeBytes(of: UInt16(1)) { Data($0) }) // mono
+        h.append(withUnsafeBytes(of: UInt32(UInt32(sampleRate))) { Data($0) })
+        let byteRate = UInt32(sampleRate) * 2
+        h.append(withUnsafeBytes(of: byteRate) { Data($0) })
+        h.append(withUnsafeBytes(of: UInt16(2)) { Data($0) })   // block align
+        h.append(withUnsafeBytes(of: UInt16(16)) { Data($0) })  // bits per sample
+        h.append("data".data(using: .ascii)!)
+        h.append(withUnsafeBytes(of: UInt32(pcmSize).littleEndian) { Data($0) })
+        return h
+    }
+}

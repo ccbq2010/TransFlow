@@ -151,7 +151,7 @@ struct SpeakerEnrollmentView: View {
                 return
             }
             let captureService = AudioCaptureService()
-            let capture = captureService.startCapture()
+            let capture = captureService.startCapture(deviceUID: AppSettings.shared.selectedInputDeviceUID)
             await MainActor.run {
                 self.audioCapture = captureService
                 self.stopCapture = capture.stop

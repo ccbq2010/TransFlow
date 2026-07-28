@@ -1,5 +1,5 @@
 import Foundation
-import WhisperKit
+@preconcurrency import WhisperKit
 import CoreMedia
 
 /// WhisperKit 版本的语音引擎
@@ -7,9 +7,13 @@ import CoreMedia
 /// 接受 AudioChunk 流（16kHz mono Float32），输出 TranscriptionEvent 流
 ///
 /// 采用滑动窗口 + 串行转写链 + 墙钟锚点时间戳方案：
-/// - 8s 窗口，每 3s 滑动一次
+/// - 默认 30s 窗口，每 5s 滑动一次（WhisperStreaming 原版推荐；可由 AppSettings 调整）
 /// - 转写任务串行执行，保证 segment 顺序
 /// - 时间戳锚点使用 AudioChunk.timestamp 追踪窗口内最早样本的真实采集时间
+///
+/// 上下文偏置（context biasing）：把 `AppSettings.hotwords` 的标准词 tokenize 为
+/// `DecodingOptions.promptTokens`，引导解码器偏向领域词，降低专有名词误识。
+/// 离线整段转写入口 `transcribeWholeFile(_:)` 供 AccuracyBenchmarks 评测使用。
 final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
     private let locale: Locale
     private let modelName: String
@@ -24,9 +28,9 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
         WhisperKitModelManager.shared.isReady
     }
 
-    /// 滑动窗口参数
-    private static let windowSeconds = 8.0
-    private static let slideSeconds = 3.0
+    /// 滑动窗口参数（原版 WhisperStreaming 推荐 30s / 5s；由 AppSettings 注入，可热调整）
+    private let windowSeconds: Double
+    private let slideSeconds: Double
     private static let sampleRate = 16000
 
     /// 初始化
@@ -45,6 +49,10 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
         self.modelName = modelName
         self.onDownloadProgress = onDownloadProgress
         self.vadService = useVAD ? VADService() : VADService(silenceThreshold: 0) // disabled
+
+        // 窗口参数从 AppSettings 读取（默认 30s / 5s，贴近 WhisperStreaming 原版推荐值）
+        self.windowSeconds = AppSettings.shared.whisperWindowSeconds
+        self.slideSeconds = AppSettings.shared.whisperSlideSeconds
     }
 
     /// 处理音频流并返回转写事件流
@@ -55,29 +63,18 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
 
         Task {
             do {
-                ErrorLogger.shared.log(
-                    "WhisperKitSpeechEngine: initializing with model \(modelName) for locale \(locale.identifier)",
-                    source: "WhisperKitSpeechEngine"
-                )
-
-                // 1. 初始化 WhisperKit（使用镜像站端点，防止模型未缓存时从 huggingface.co 下载失败）
-                let config = WhisperKitConfig(
-                    model: modelName,
-                    modelEndpoint: WhisperKitModelManager.mirrorEndpoint
-                )
-                let whisperKit = try await WhisperKit(config)
-
-                // 通知模型已就绪
-                onDownloadProgress?(1.0)
-
-                ErrorLogger.shared.log("WhisperKit initialized successfully", source: "WhisperKitSpeechEngine")
+                // 1. 初始化 WhisperKit（加载逻辑见 loadWhisperKit，含 90s ANE 编译硬超时）
+                let whisperKit = try await loadWhisperKit()
 
                 // 2. 设置语言
                 let languageCode = Self.convertLocaleToWhisperLanguage(locale)
 
+                // 上下文偏置 prompt：从 AppSettings.hotwords 构建，整条流复用一份
+                let promptText = await Self.contextPromptText()
+
                 // 3. 滑动窗口参数
-                let chunkSize = Int(Double(Self.sampleRate) * Self.windowSeconds)
-                let slideSize = Int(Double(Self.sampleRate) * Self.slideSeconds)
+                let chunkSize = Int(Double(Self.sampleRate) * self.windowSeconds)
+                let slideSize = Int(Double(Self.sampleRate) * self.slideSeconds)
 
                 // 4. 状态
                 var audioBuffer: [Float] = []
@@ -93,7 +90,7 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                 nonisolated(unsafe) let capturedWhisperKit = whisperKit
 
                 ErrorLogger.shared.log(
-                    "Starting audio processing loop (window=\(Self.windowSeconds)s, slide=\(Self.slideSeconds)s)",
+                    "Starting audio processing loop (window=\(self.windowSeconds)s, slide=\(self.slideSeconds)s, promptTokens=\(promptText.isEmpty ? "none" : "set"))",
                     source: "WhisperKitSpeechEngine"
                 )
 
@@ -131,11 +128,10 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                             let speechSamples = vadService.extractSpeech(window)
                             let audioToTranscribe = speechSamples.isEmpty ? window : speechSamples
 
-                            let decodeOptions = DecodingOptions(
-                                verbose: false,
-                                task: .transcribe,
-                                language: languageCode,
-                                temperature: 0.0
+                            let decodeOptions = buildDecodeOptions(
+                                languageCode: languageCode,
+                                whisperKit: capturedWhisperKit,
+                                promptText: promptText
                             )
 
                             let results = try await capturedWhisperKit.transcribe(
@@ -191,14 +187,13 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
                         let speechSamples = vadService.extractSpeech(remainingWindow)
                         let audioToTranscribe = speechSamples.isEmpty ? remainingWindow : speechSamples
 
-                        let decodeOptions = DecodingOptions(
-                            verbose: false,
-                            task: .transcribe,
-                            language: languageCode,
-                            temperature: 0.0
+                        let decodeOptions = buildDecodeOptions(
+                            languageCode: languageCode,
+                            whisperKit: capturedWhisperKit,
+                            promptText: promptText
                         )
 
-                        let results = try await whisperKit.transcribe(
+                        let results = try await capturedWhisperKit.transcribe(
                             audioArray: audioToTranscribe,
                             decodeOptions: decodeOptions
                         )
@@ -248,6 +243,171 @@ final class WhisperKitSpeechEngine: TranscriptionEngineProtocol {
         }
 
         return events
+    }
+
+    // MARK: - Model Loading
+
+    /// 加载 WhisperKit（含 90s Core ML ANE 编译硬超时）。
+    /// 本地有模型则离线加载（绕过 hf-mirror 元数据兼容 bug），否则走镜像站下载。
+    private func loadWhisperKit() async throws -> WhisperKit {
+        ErrorLogger.shared.log(
+            "WhisperKitSpeechEngine: [1/5] init start, model=\(modelName), locale=\(locale.identifier)",
+            source: "WhisperKitSpeechEngine"
+        )
+
+        // 模型已在本地时直接用 modelFolder 离线加载（download: false），
+        // 绕过 hub 元数据检查——该检查对 hf-mirror 有兼容 bug（"Invalid metadata"），
+        // 即使文件齐全也可能失败。仅当本地无模型时才走镜像站下载路径。
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let localModelFolder = documents
+            .appending(component: "huggingface")
+            .appending(component: "models")
+            .appending(component: "argmaxinc")
+            .appending(component: "whisperkit-coreml")
+            .appending(component: modelName)
+        let hasLocalModel = FileManager.default.fileExists(
+            atPath: localModelFolder.appending(path: "TextDecoder.mlmodelc/weights/weight.bin").path
+        )
+
+        ErrorLogger.shared.log(
+            "WhisperKitSpeechEngine: [2/5] hasLocalModel=\(hasLocalModel), path=\(localModelFolder.path)",
+            source: "WhisperKitSpeechEngine"
+        )
+
+        let config: WhisperKitConfig
+        if hasLocalModel {
+            ErrorLogger.shared.log(
+                "WhisperKitSpeechEngine: [3/5] building config (offline mode)",
+                source: "WhisperKitSpeechEngine"
+            )
+            config = WhisperKitConfig(
+                modelFolder: localModelFolder.path,
+                download: false
+            )
+        } else {
+            ErrorLogger.shared.log(
+                "WhisperKitSpeechEngine: [3/5] building config (download mode, this may hit network)",
+                source: "WhisperKitSpeechEngine"
+            )
+            config = WhisperKitConfig(
+                model: modelName,
+                modelEndpoint: WhisperKitModelManager.mirrorEndpoint
+            )
+        }
+        ErrorLogger.shared.log(
+            "WhisperKitSpeechEngine: [4/5] calling WhisperKit(config) — first run may take 10-60s for Core ML ANE compile",
+            source: "WhisperKitSpeechEngine"
+        )
+
+        // 90s hard cap: Core ML 首次 ANE 编译上限；超时则明确报错而不是无限等待
+        let whisperKit: WhisperKit
+        do {
+            whisperKit = try await withThrowingTaskGroup(of: WhisperKit.self) { group in
+                group.addTask { try await WhisperKit(config) }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 90_000_000_000)
+                    throw NSError(
+                        domain: "WhisperKitSpeechEngine",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "WhisperKit load timed out after 90s (Core ML ANE compile stalled?)"]
+                    )
+                }
+                // First task to finish wins; cancel the other.
+                let first = try await group.next()!
+                group.cancelAll()
+                return first
+            }
+        } catch {
+            ErrorLogger.shared.log(
+                "WhisperKitSpeechEngine: [4/5/FAIL] \(error.localizedDescription)",
+                source: "WhisperKitSpeechEngine"
+            )
+            throw error
+        }
+
+        ErrorLogger.shared.log(
+            "WhisperKitSpeechEngine: [5/5] WhisperKit loaded, tokenizer=\(whisperKit.tokenizer != nil ? "ready" : "missing"), starting audio loop",
+            source: "WhisperKitSpeechEngine"
+        )
+
+        // 通知模型已就绪
+        onDownloadProgress?(1.0)
+
+        ErrorLogger.shared.log("WhisperKit initialized successfully", source: "WhisperKitSpeechEngine")
+        return whisperKit
+    }
+
+    // MARK: - Decoding Options (shared: streaming + offline benchmark)
+
+    /// 从 `AppSettings.hotwords` 构建上下文偏置 prompt 文本（取每个热词的标准形式）。
+    /// 热词条目格式为 "standard" 或 "standard,variant1,variant2"，这里只取标准词。
+    @MainActor
+    private static func contextPromptText() -> String {
+        let standards = AppSettings.shared.hotwords.compactMap { entry -> String? in
+            guard let first = entry.split(separator: ",").first else { return nil }
+            let standard = first.trimmingCharacters(in: .whitespaces)
+            return standard.isEmpty ? nil : standard
+        }
+        return standards.joined(separator: ", ")
+    }
+
+    /// 构建解码选项（流式窗口路径与离线整段转写共用）。
+    /// 含上下文偏置：把热词 prompt 文本 tokenize 为 `promptTokens`，引导解码器偏向领域词，
+    /// 降低专有名词误识。无热词时不传 prompt（nil = 不偏置），保持原行为。
+    private func buildDecodeOptions(
+        languageCode: String,
+        whisperKit: WhisperKit,
+        promptText: String
+    ) -> DecodingOptions {
+        var promptTokens: [Int]? = nil
+        if !promptText.isEmpty, let tokenizer = whisperKit.tokenizer {
+            // WhisperTokenizer 协议只暴露 encode(text:)（默认含 special tokens）。
+            // WhisperKit 解码时会自动过滤 special token 并截断到上下文一半
+            // （见 TextDecoder: filter { $0 < specialTokenBegin } + suffix(maxPromptLen)），
+            // 因此这里直接 encode 即可，无需手动去 special token。
+            let tokens = tokenizer.encode(text: promptText)
+            if !tokens.isEmpty {
+                promptTokens = tokens
+            }
+        }
+
+        return DecodingOptions(
+            verbose: false,
+            task: .transcribe,
+            language: languageCode,
+            temperature: 0.0,
+            // 原版 Whisper 质量门禁：温度回退 + 对数概率/压缩比/无语音阈值，
+            // 过滤静音、噪声与低置信幻觉，显著降低 WER。
+            temperatureIncrementOnFallback: 0.2,
+            temperatureFallbackCount: 5,
+            promptTokens: promptTokens,
+            compressionRatioThreshold: 2.4,
+            logProbThreshold: -1.0,
+            noSpeechThreshold: 0.6
+        )
+    }
+
+    /// 离线整段转写（供 AccuracyBenchmarks 评测使用，见 docs/autonomous-improvement.md 提示词 A）。
+    ///
+    /// 复用与流式路径相同的模型加载与 `DecodingOptions`（含上下文偏置），
+    /// 一次性转写整段 16kHz mono Float32 音频并返回拼接文本，便于离线批量计算 WER/CER。
+    /// - Parameter audio: 16kHz mono Float32 采样数组
+    /// - Returns: 所有 segment 文本用单空格拼接的结果
+    func transcribeWholeFile(_ audio: [Float]) async throws -> String {
+        let whisperKit = try await loadWhisperKit()
+        let languageCode = Self.convertLocaleToWhisperLanguage(locale)
+        let promptText = await Self.contextPromptText()
+        let decodeOptions = buildDecodeOptions(
+            languageCode: languageCode,
+            whisperKit: whisperKit,
+            promptText: promptText
+        )
+
+        let results = try await whisperKit.transcribe(audioArray: audio, decodeOptions: decodeOptions)
+        return results.first?.segments
+            .compactMap { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ") ?? ""
     }
 
     // MARK: - Language Conversion

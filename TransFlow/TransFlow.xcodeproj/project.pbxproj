@@ -219,8 +219,8 @@
 			mainGroup = F4C5EDEB2F3638BD006D8A00;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-			F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "FluidAudio" */,
-			WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "WhisperKit" */,
+				F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "../.local-packages/FluidAudio" */,
+				WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "../.local-packages/WhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F4C5EDF52F3638BD006D8A00 /* Products */;
@@ -600,11 +600,11 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "FluidAudio" */ = {
+		F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "../.local-packages/FluidAudio" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../.local-packages/FluidAudio";
 		};
-		WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "WhisperKit" */ = {
+		WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "../.local-packages/WhisperKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../.local-packages/WhisperKit";
 		};
@@ -613,12 +613,12 @@
 /* Begin XCSwiftPackageProductDependency section */
 		F4D1A0022F4A0001006D8A00 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "FluidAudio" */;
+			package = F4D1A0012F4A0000006D8A00 /* XCLocalSwiftPackageReference "../.local-packages/FluidAudio" */;
 			productName = FluidAudio;
 		};
 		WK0000012F4A0001006D8A00 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "WhisperKit" */;
+			package = WK0000002F4A0000006D8A00 /* XCLocalSwiftPackageReference "../.local-packages/WhisperKit" */;
 			productName = WhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */

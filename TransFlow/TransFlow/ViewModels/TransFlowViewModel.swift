@@ -19,8 +19,10 @@ final class TransFlowViewModel {
     var audioLevelHistory: [Float] = Array(repeating: 0, count: 30)
     /// Selected audio source
     var audioSource: AudioSourceType = .microphone
-    /// Selected transcription language
-    var selectedLanguage: Locale = Locale(identifier: "en-US")
+    /// Selected transcription language.
+    /// Defaults to the system's primary language so a non-English user isn't silently
+    /// forced into an `en-US` transcriber (which would produce garbage for their speech).
+    var selectedLanguage: Locale = Locale.current
     /// Available transcription languages (installed/ready only)
     var availableLanguages: [Locale] = []
     /// Available apps for audio capture
@@ -170,21 +172,60 @@ final class TransFlowViewModel {
             (modelManager.localeStatuses[locale.identifier] ?? .checking).isReady
         }
 
-        // 同语言代码（如 zh-CN、zh-TW）只保留第一个，避免地区变体重复
-        var seenLanguageCodes = Set<String>()
+        // 同语言代码（如 zh-CN、zh-TW）只保留一个变体。
+        // 注意：不能按字母序取第一个 —— 英语会选中 en_AU（澳洲）而不是 en_US，
+        // 用错地区模型会显著拉低识别率。优先级：系统偏好语言 > 常用地区变体 > 字母序。
+        func variantPriority(_ locale: Locale) -> Int {
+            let id = locale.identifier
+                .replacingOccurrences(of: "_", with: "-")
+                .lowercased()
+            // 1. 与系统偏好语言完全匹配（如系统为 en-US 时优先 en_US）
+            for (index, preferred) in Locale.preferredLanguages.enumerated()
+            where preferred.lowercased() == id {
+                return index
+            }
+            // 2. 各语言的常用地区变体
+            let canonical: [String: String] = [
+                "en": "en-us", "zh": "zh-cn", "es": "es-es", "fr": "fr-fr",
+                "de": "de-de", "pt": "pt-br", "ja": "ja-jp", "ko": "ko-kr",
+            ]
+            if let code = locale.language.languageCode?.identifier.lowercased(),
+               canonical[code] == id {
+                return 100
+            }
+            // 3. 其余按字母序兜底
+            return 1000
+        }
+        var bestVariant: [String: Locale] = [:]
+        for locale in readyLanguages {
+            let code = locale.language.languageCode?.identifier ?? locale.identifier
+            if let existing = bestVariant[code] {
+                if variantPriority(locale) < variantPriority(existing) {
+                    bestVariant[code] = locale
+                }
+            } else {
+                bestVariant[code] = locale
+            }
+        }
         availableLanguages = readyLanguages.filter { locale in
             let code = locale.language.languageCode?.identifier ?? locale.identifier
-            // 英语保留 en-US 和 en-GB 等常见变体？暂不特殊处理，统一去重
-            if seenLanguageCodes.contains(code) { return false }
-            seenLanguageCodes.insert(code)
-            return true
+            return bestVariant[code]?.identifier == locale.identifier
         }
 
         guard !availableLanguages.isEmpty else { return }
 
         let selectedIdentifier = selectedLanguage.identifier
         if !availableLanguages.contains(where: { $0.identifier == selectedIdentifier }) {
-            selectedLanguage = availableLanguages[0]
+            // Prefer the system's primary language if it's ready, instead of blindly
+            // picking the alphabetically-first locale (which could be an unrelated language).
+            let systemCode = Locale.current.language.languageCode?.identifier
+            if let preferred = availableLanguages.first(where: {
+                $0.language.languageCode?.identifier == systemCode
+            }) {
+                selectedLanguage = preferred
+            } else {
+                selectedLanguage = availableLanguages[0]
+            }
             translationService.updateSourceLanguage(from: selectedLanguage)
         }
     }
@@ -379,13 +420,10 @@ final class TransFlowViewModel {
                     bufferingPolicy: .bufferingOldest(128)  // avoid dropping audio frames
                 )
 
-                let events: AsyncStream<TranscriptionEvent>
-
+                let baseEngine: any TranscriptionEngineProtocol
                 switch AppSettings.shared.transcriptionEngine {
                 case .appleSpeech:
-                    let speechEngine = SpeechEngine(locale: selectedLanguage)
-                    self.speechEngine = speechEngine
-                    events = speechEngine.processStream(engineStream)
+                    baseEngine = SpeechEngine(locale: selectedLanguage)
 
                 case .whisperKit:
                     // S3 修复：WhisperKit 路径也检查模型是否就绪
@@ -395,10 +433,31 @@ final class TransFlowViewModel {
                         listeningState = .idle
                         return
                     }
-                    let whisperEngine = WhisperKitSpeechEngine(locale: selectedLanguage)
-                    self.speechEngine = whisperEngine
-                    events = whisperEngine.processStream(engineStream)
+                    baseEngine = WhisperKitSpeechEngine(locale: selectedLanguage)
                 }
+
+                // Scheme A: when cloud ASR correction is enabled and configured, wrap the
+                // on-device engine so each finalized sentence is re-sent to the cloud for
+                // higher accuracy while live partial captions remain on-device.
+                let cloudConfig = AppSettings.shared.cloudASR
+                let finalEngine: any TranscriptionEngineProtocol
+                if cloudConfig.isConfigured {
+                    finalEngine = CloudCorrectedTranscriptionEngine(inner: baseEngine, config: cloudConfig)
+                    ErrorLogger.shared.log(
+                        "startListening: cloud ASR correction enabled (provider=\(cloudConfig.provider.rawValue), model=\(cloudConfig.model))",
+                        source: "Transcription"
+                    )
+                } else {
+                    finalEngine = baseEngine
+                    if cloudConfig.enabled, cloudConfig.apiKey.isEmpty {
+                        ErrorLogger.shared.log(
+                            "startListening: cloud ASR enabled but API key missing — using on-device only",
+                            source: "Transcription"
+                        )
+                    }
+                }
+                self.speechEngine = finalEngine
+                let events = finalEngine.processStream(engineStream)
 
                 let audioStream: AsyncStream<AudioChunk>
                 let stop: @Sendable () -> Void
@@ -411,7 +470,7 @@ final class TransFlowViewModel {
                         listeningState = .idle
                         return
                     }
-                    let capture = audioCaptureService.startCapture()
+                    let capture = audioCaptureService.startCapture(deviceUID: AppSettings.shared.selectedInputDeviceUID)
                     audioStream = capture.stream
                     stop = capture.stop
 

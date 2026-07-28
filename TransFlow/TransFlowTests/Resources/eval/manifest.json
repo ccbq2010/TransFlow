@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "description": "TransFlow 识别率评测集 (WER/CER evaluation set). 每个 case 包含 <id>.wav (16kHz mono) 与 <id>.ref.txt (黄金转录). 注意: 当前仅为冒烟级基线, 需补充真实噪声/多人场景以获得代表性 WER.",
+  "cases": [
+    {
+      "id": "jfk",
+      "language": "en",
+      "synthetic": false,
+      "note": "JFK 就职演说片段 (真实人声, 公有领域); 英文 WER 基线 case"
+    },
+    {
+      "id": "zh_sample",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成; 仅用于 CER 路径冒烟, 不代表真实场景, 不计入代表性 WER"
+    }
+  ]
+}

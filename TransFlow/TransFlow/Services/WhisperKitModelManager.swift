@@ -39,21 +39,17 @@ final class WhisperKitModelManager {
     private init() {}
 
     /// Check if the model is already downloaded.
-    /// 同时检查 UserDefaults 标记和磁盘文件，避免用户清理缓存后误报就绪。
+    /// 以磁盘文件为准（支持手动放置的模型），UserDefaults 标记仅作缓存同步。
     func checkStatus(modelName: String = WhisperKitModelManager.defaultModelName) async {
         let key = "whisperkit.model.\(modelName).downloaded"
-        let userDefaultsSaysReady = UserDefaults.standard.bool(forKey: key)
 
-        if userDefaultsSaysReady {
-            // 验证模型文件确实存在
-            if Self.modelExistsOnDisk(modelName: modelName) {
-                downloadState = .ready
-            } else {
-                // UserDefaults 标记为已下载但文件不存在（用户清理了缓存）
-                UserDefaults.standard.set(false, forKey: key)
-                downloadState = .notDownloaded
-            }
+        if Self.modelExistsOnDisk(modelName: modelName) {
+            // 模型文件在磁盘上（无论是 app 下载的还是手动放置的）即视为就绪
+            UserDefaults.standard.set(true, forKey: key)
+            downloadState = .ready
         } else {
+            // 文件不存在（用户清理了缓存或从未下载）
+            UserDefaults.standard.set(false, forKey: key)
             downloadState = .notDownloaded
         }
     }
@@ -68,7 +64,16 @@ final class WhisperKitModelManager {
             .appending(component: "argmaxinc")
             .appending(component: "whisperkit-coreml")
             .appending(component: modelName)
-        return FileManager.default.fileExists(atPath: modelPath.path)
+        // 目录存在不代表下载完整：校验核心 Core ML 权重文件都在
+        let requiredFiles = [
+            "AudioEncoder.mlmodelc/weights/weight.bin",
+            "TextDecoder.mlmodelc/weights/weight.bin",
+            "MelSpectrogram.mlmodelc/weights/weight.bin",
+            "config.json",
+        ]
+        return requiredFiles.allSatisfy { relative in
+            FileManager.default.fileExists(atPath: modelPath.appending(path: relative).path)
+        }
     }
 
     /// Download the WhisperKit model.
