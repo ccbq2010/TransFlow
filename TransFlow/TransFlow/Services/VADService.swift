@@ -116,4 +116,34 @@ final class VADService: Sendable {
             return Array(samples[range.lowerBound...upper])
         }
     }
+
+    /// P0-4 修复：提取语音段并返回拼接后的音频 + 偏移映射。
+    ///
+    /// WhisperKit 对拼接后的音频做转写时，segment.start/end 是相对于拼接后音频的时间戳。
+    /// 调用方需要用 originalOffsets + concatenatedDurations 构建查找表，
+    /// 将相对时间戳映射回原始音频的绝对偏移，避免时间戳漂移。
+    ///
+    /// - Parameter samples: 原始 16kHz mono Float32 音频
+    /// - Returns: (拼接后的语音样本, 每段在原始音频中的起始偏移秒数, 每段在拼接后音频中的时长秒数)
+    func extractSpeechWithOffsets(_ samples: [Float]) -> (audio: [Float], originalOffsets: [Double], concatenatedDurations: [Double]) {
+        let segments = detectSpeechSegments(samples)
+        guard !segments.isEmpty else { return ([], [], []) }
+
+        var audio: [Float] = []
+        var offsets: [Double] = []
+        var durations: [Double] = []
+
+        for range in segments {
+            let upper = min(range.upperBound, samples.count - 1)
+            guard range.lowerBound <= upper else { continue }
+            let sampleCount = upper - range.lowerBound + 1
+            // 记录该段在原始音频中的起始偏移（秒）
+            offsets.append(Double(range.lowerBound) / Double(sampleRate))
+            // 记录该段在拼接后音频中的时长（秒）
+            durations.append(Double(sampleCount) / Double(sampleRate))
+            audio.append(contentsOf: samples[range.lowerBound...upper])
+        }
+
+        return (audio, offsets, durations)
+    }
 }

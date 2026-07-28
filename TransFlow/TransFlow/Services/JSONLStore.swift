@@ -42,6 +42,27 @@ final class JSONLStore {
 
     init() {
         ensureDirectoryExists()
+        // P1-3 修复：监听应用终止通知，确保 writeHandle 被正确关闭
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillTerminate),
+            name: .willTerminate,
+            object: nil
+        )
+    }
+
+    deinit {
+        // P1-3 修复：deinit 时关闭 writeHandle，防止文件描述符泄漏
+        writeHandle?.closeFile()
+        writeHandle = nil
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleWillTerminate() {
+        // P1-3 修复：应用退出时刷新并关闭 writeHandle
+        writeHandle?.synchronizeFile()
+        writeHandle?.closeFile()
+        writeHandle = nil
     }
 
     // MARK: - Session Management

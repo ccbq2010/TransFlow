@@ -19,8 +19,17 @@ actor AudioWindowBuffer {
 
     private func trim() {
         guard let last = entries.last?.0 else { return }
-        while let first = entries.first, last.timeIntervalSince(first.0) > maxDuration {
-            entries.removeFirst()
+        // P2-2 修复：批量移除过期条目，避免逐个 removeFirst 的 O(n²) 复杂度
+        var cutIndex = 0
+        for (i, entry) in entries.enumerated() {
+            if last.timeIntervalSince(entry.0) > maxDuration {
+                cutIndex = i + 1
+            } else {
+                break
+            }
+        }
+        if cutIndex > 0 {
+            entries.removeFirst(cutIndex)
         }
     }
 
@@ -48,6 +57,9 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
     private let config: CloudASRConfig
     private let service: any CloudASRServiceProtocol
 
+    /// P1-5 修复：存储 processStream 内部的 Task，使 stop() 能够取消它
+    nonisolated(unsafe) private var processingTask: Task<Void, Never>?
+
     @MainActor static var isAvailable: Bool { true }
 
     init(
@@ -66,7 +78,8 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
         )
         let config = self.config
 
-        Task {
+        // P1-5 修复：存储 Task 引用以支持取消
+        processingTask = Task {
             // Fork the incoming audio so both the inner engine and our tap see every chunk.
             let (innerStream, innerCont) = AsyncStream<AudioChunk>.makeStream(
                 bufferingPolicy: .bufferingOldest(256)
@@ -114,6 +127,12 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
         }
 
         return outEvents
+    }
+
+    /// P1-5 修复：取消 processStream 内部的处理 Task，防止快速重启时旧引擎泄漏。
+    func stop() {
+        processingTask?.cancel()
+        processingTask = nil
     }
 
     // MARK: - Correction

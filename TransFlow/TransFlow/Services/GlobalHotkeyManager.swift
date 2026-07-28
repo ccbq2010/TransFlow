@@ -62,7 +62,7 @@ final class GlobalHotkeyManager {
     func start() {
         Task {
             try? await Task.sleep(nanoseconds: 500_000_000)
-            self.setupWithRetry()
+            await self.setupWithRetry()
         }
     }
 
@@ -70,7 +70,7 @@ final class GlobalHotkeyManager {
         healthCheckTask?.cancel()
         isInitialized = false
         cleanupEventTap()
-        setupWithRetry()
+        Task { await setupWithRetry() }
     }
 
     func requestAccessibility() {
@@ -94,14 +94,16 @@ final class GlobalHotkeyManager {
 
     // MARK: - Setup
 
-    private func setupWithRetry() {
+    private func setupWithRetry() async {
         for attempt in 1...5 {
             if setupEventTap() {
                 isInitialized = true
                 startHealthCheck()
                 return
             }
-            if attempt < 5 { Thread.sleep(forTimeInterval: 0.3) }
+            if attempt < 5 {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
         }
     }
 
@@ -188,10 +190,10 @@ final class GlobalHotkeyManager {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { break }
-                guard let tap = self.eventTap else { self.setupWithRetry(); continue }
+                guard let tap = self.eventTap else { await self.setupWithRetry(); continue }
                 if !CGEvent.tapIsEnabled(tap: tap) {
                     CGEvent.tapEnable(tap: tap, enable: true)
-                    if !CGEvent.tapIsEnabled(tap: tap) { self.setupWithRetry() }
+                    if !CGEvent.tapIsEnabled(tap: tap) { await self.setupWithRetry() }
                 }
             }
         }

@@ -96,6 +96,9 @@ final class TransFlowViewModel {
     /// Session start time for converting absolute timestamps to relative offsets.
     private var sessionStartTime: Date?
 
+    /// P1-4 修复：throttle rewriteJSONLWithCurrentSentences 的延迟 Task
+    private var rewriteThrottleTask: Task<Void, Never>?
+
     /// Realtime diarization service.
     private var realtimeDiarizationService: RealtimeDiarizationService?
 
@@ -112,7 +115,7 @@ final class TransFlowViewModel {
     }
 
     deinit {
-        // 兜底清理：deinit 是非隔离的，不能直接访问 @MainActor 隔离属性。
+        // P3-1 修复：兜底清理。deinit 是非隔离的，不能直接访问 @MainActor 隔离属性。
         // 用 Task 兜底在 MainActor 上清理，若 VM 已释放则 weak self 为 nil 跳过。
         // 正常路径下 stopListening() 会被调用并清理所有资源。
         Task { @MainActor [weak self] in
@@ -120,6 +123,14 @@ final class TransFlowViewModel {
             self?.audioLevelTask?.cancel()
             self?.recordingTask?.cancel()
             self?.diarizationTask?.cancel()
+            self?.rewriteThrottleTask?.cancel()
+            // P3-1：也取消引擎内部 Task
+            if let engine = self?.speechEngine as? WhisperKitSpeechEngine {
+                engine.stop()
+            }
+            if let engine = self?.speechEngine as? CloudCorrectedTranscriptionEngine {
+                engine.stop()
+            }
             self?.stopAudioCapture?()
             if let observer = self?.lifecycleObserver {
                 NotificationCenter.default.removeObserver(observer)
@@ -679,8 +690,11 @@ final class TransFlowViewModel {
         activeSpeakerCount = 0
         sessionStartTime = nil
 
-        // P1-1 修复：取消引擎内部处理 Task，防止资源泄漏
+        // P1-1 / P1-5 修复：取消引擎内部处理 Task，防止资源泄漏
         if let engine = speechEngine as? WhisperKitSpeechEngine {
+            engine.stop()
+        }
+        if let engine = speechEngine as? CloudCorrectedTranscriptionEngine {
             engine.stop()
         }
         stopAudioCapture?()
@@ -806,8 +820,23 @@ final class TransFlowViewModel {
         }
     }
 
+    /// P1-4 修复：debounce 版 rewriteJSONLWithCurrentSentences。
+    /// 短时间内多次调用（如 diarization backfill 密集更新）只执行最后一次，避免高频全文件重写。
+    private func scheduleRewriteJSONL() {
+        rewriteThrottleTask?.cancel()
+        rewriteThrottleTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
+            guard !Task.isCancelled else { return }
+            self?.performRewriteJSONL()
+        }
+    }
+
     /// Rewrite the JSONL file with updated speaker IDs after backfill.
     private func rewriteJSONLWithCurrentSentences() {
+        scheduleRewriteJSONL()
+    }
+
+    private func performRewriteJSONL() {
         guard let fileURL = jsonlStore.currentFileURL else { return }
         let allLines = jsonlStore.readAllLines(from: fileURL)
 

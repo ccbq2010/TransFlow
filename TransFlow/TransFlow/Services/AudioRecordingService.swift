@@ -83,12 +83,14 @@ final class AudioRecordingService: @unchecked Sendable {
 
     /// Write a single AudioChunk to the recording file. Safe to call from any thread.
     nonisolated func writeChunk(_ chunk: AudioChunk) {
+        // P3-2 修复：整个写入操作在锁内完成，防止 stopRecording 并发时
+        // 向已关闭的文件写入数据
         lock.lock()
+        defer { lock.unlock() }
+
         guard let audioFile = _audioFile, let inputFormat = _inputFormat else {
-            lock.unlock()
             return
         }
-        lock.unlock()
 
         let frameCount = AVAudioFrameCount(chunk.samples.count)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameCount) else { return }

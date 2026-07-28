@@ -80,6 +80,10 @@ struct CloudASRService: CloudASRServiceProtocol {
 
     private func transcribeChunked(wav: Data, maxChunkBytes: Int) async -> String? {
         let pcm = Array(wav.dropFirst(44))
+        // P2-4 修复：分块间增加 0.5s 重叠（16kHz 16-bit mono = 16000 bytes/s），
+        // 避免在单词中间硬切分导致识别质量下降
+        let overlapBytes = min(16_000, maxChunkBytes / 4) // 0.5s or 25% of chunk
+        let stride = max(1, maxChunkBytes - overlapBytes)
         var chunks: [Data] = []
         var offset = 0
         while offset < pcm.count {
@@ -88,17 +92,19 @@ struct CloudASRService: CloudASRServiceProtocol {
             var chunkWav = Self.buildWavHeader(pcmSize: UInt32(chunkPCM.count), sampleRate: 16_000)
             chunkWav.append(chunkPCM)
             chunks.append(chunkWav)
-            offset = end
+            if end >= pcm.count { break }
+            offset += stride
         }
-        let results = await withTaskGroup(of: String?.self) { group -> [String] in
-            for chunk in chunks {
-                group.addTask { await self.post(wavData: chunk) }
+        // P0-3 修复：用索引保留原始顺序，避免并发完成顺序不一致导致结果乱序
+        let results = await withTaskGroup(of: (Int, String?).self) { group -> [String] in
+            for (i, chunk) in chunks.enumerated() {
+                group.addTask { (i, await self.post(wavData: chunk)) }
             }
-            var out: [String] = []
-            for await r in group {
-                if let r, !r.isEmpty { out.append(r) }
+            var indexed: [(Int, String)] = []
+            for await (i, r) in group {
+                if let r, !r.isEmpty { indexed.append((i, r)) }
             }
-            return out
+            return indexed.sorted { $0.0 < $1.0 }.map(\.1)
         }
         return results.isEmpty ? nil : results.joined(separator: " ")
     }

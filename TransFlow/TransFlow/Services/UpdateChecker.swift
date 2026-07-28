@@ -104,7 +104,10 @@ final class UpdateChecker {
                 return
             }
 
-            let url = URL(string: pkgAsset.browserDownloadURL)!
+            guard let url = URL(string: pkgAsset.browserDownloadURL) else {
+                status = .failed(message: "Invalid download URL")
+                return
+            }
             status = .downloading(progress: 0)
 
             let delegate = PKGDownloadDelegate { [weak self] progress in

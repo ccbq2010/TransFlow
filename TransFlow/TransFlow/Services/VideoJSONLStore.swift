@@ -11,6 +11,9 @@ final class VideoJSONLStore {
     private(set) var currentSessionName: String = ""
     private(set) var currentFileURL: URL?
 
+    /// P2-1 修复：持久 writeHandle，避免每次 append 都 open/close
+    private var writeHandle: FileHandle?
+
     // MARK: - Private
 
     private let fileManager = FileManager.default
@@ -29,12 +32,35 @@ final class VideoJSONLStore {
 
     init() {
         ensureDirectoryExists()
+        // P2-1 修复：监听应用终止通知
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillTerminate),
+            name: .willTerminate,
+            object: nil
+        )
+    }
+
+    deinit {
+        writeHandle?.closeFile()
+        writeHandle = nil
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func handleWillTerminate() {
+        writeHandle?.synchronizeFile()
+        writeHandle?.closeFile()
+        writeHandle = nil
     }
 
     // MARK: - Session Management
 
     @discardableResult
     func createSession(name: String? = nil, metadata: VideoJSONLMetadata) -> String {
+        // P2-1 修复：关闭之前的 writeHandle
+        writeHandle?.closeFile()
+        writeHandle = nil
+
         let sessionName = name ?? Self.generateDefaultName()
         let fileURL = videoTranscriptionsDirectory.appendingPathComponent("\(sessionName).jsonl")
 
@@ -44,6 +70,11 @@ final class VideoJSONLStore {
 
         currentSessionName = sessionName
         currentFileURL = fileURL
+
+        // P2-1 修复：打开持久 writeHandle
+        writeHandle = try? FileHandle(forWritingTo: fileURL)
+        writeHandle?.seekToEndOfFile()
+
         return sessionName
     }
 
@@ -311,10 +342,16 @@ final class VideoJSONLStore {
 
     private func appendRaw(_ line: String, to fileURL: URL) {
         let data = Data(("\n" + line).utf8)
-        if let handle = try? FileHandle(forWritingTo: fileURL) {
-            handle.seekToEndOfFile()
+        // P2-1 修复：使用持久 writeHandle
+        if let handle = writeHandle {
             handle.write(data)
-            handle.closeFile()
+        } else {
+            // Fallback: 若 writeHandle 不可用则临时打开
+            if let handle = try? FileHandle(forWritingTo: fileURL) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+            }
         }
     }
 
