@@ -74,6 +74,12 @@ final class GlobalHotkeyManager {
     }
 
     func requestAccessibility() {
+        // Only prompt if not already trusted, so the system Accessibility dialog is not
+        // re-shown on every call. AXIsProcessTrusted() checks WITHOUT prompting.
+        guard !AXIsProcessTrusted() else {
+            pollAccessibility()
+            return
+        }
         let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         AXIsProcessTrustedWithOptions(opts)
         pollAccessibility()

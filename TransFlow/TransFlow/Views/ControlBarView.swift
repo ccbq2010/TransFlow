@@ -210,6 +210,16 @@ struct ControlBarView: View {
             Divider()
 
             if viewModel.availableApps.isEmpty {
+                if !AppAudioCaptureService.isScreenRecordingAuthorized {
+                    Button {
+                        Task {
+                            _ = AppAudioCaptureService.requestScreenRecordingAccess()
+                            await viewModel.refreshAvailableApps()
+                        }
+                    } label: {
+                        Label("control.grant_screen_recording", systemImage: "lock.open.fill")
+                    }
+                }
                 Text("control.no_apps")
             } else {
                 ForEach(viewModel.availableApps) { app in
