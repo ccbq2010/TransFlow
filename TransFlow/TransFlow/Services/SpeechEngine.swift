@@ -31,7 +31,7 @@ final class SpeechEngine: TranscriptionEngineProtocol {
                     equivalentTo: locale
                 ) else {
                     ErrorLogger.shared.log("Language \(locale.identifier) not supported", source: "SpeechEngine")
-                    continuation.yield(.error("Language \(locale.identifier) not supported"))
+                    continuation.yield(.error(String(localized: "speech.error.language_not_supported \(locale.identifier)")))
                     continuation.finish()
                     return
                 }
@@ -122,7 +122,7 @@ final class SpeechEngine: TranscriptionEngineProtocol {
                         }
                     } catch {
                         ErrorLogger.shared.log("Speech error: \(error.localizedDescription)", source: "SpeechEngine")
-                        continuation.yield(.error("Speech error: \(error.localizedDescription)"))
+                        continuation.yield(.error(String(localized: "speech.error.speech_error \(error.localizedDescription)")))
                     }
                 }
 
@@ -180,7 +180,7 @@ final class SpeechEngine: TranscriptionEngineProtocol {
 
             } catch {
                 ErrorLogger.shared.log("Engine error: \(error.localizedDescription)", source: "SpeechEngine")
-                continuation.yield(.error("Engine error: \(error.localizedDescription)"))
+                continuation.yield(.error(String(localized: "speech.error.engine_error \(error.localizedDescription)")))
             }
             continuation.finish()
         }

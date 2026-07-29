@@ -48,14 +48,17 @@ final class TransFlowViewModel {
     /// Whether real-time speaker diarization is active this session.
     var isDiarizationEnabled: Bool = false
 
+    /// P2-2 修复：Diarization 协调器，从 ViewModel 拆分出的 diarization 逻辑
+    let diarizationCoordinator = DiarizationCoordinator()
+
     /// Active speaker count from the current diarization session.
-    var activeSpeakerCount: Int = 0
+    var activeSpeakerCount: Int { diarizationCoordinator.activeSpeakerCount }
 
     /// Speaker name overrides set by the user during/after a session (anonymousId → name).
-    var speakerNameOverrides: [String: String] = [:]
+    var speakerNameOverrides: [String: String] { diarizationCoordinator.speakerNameOverrides }
 
     /// Bumped whenever speakerNameOverrides changes to force SwiftUI re-render.
-    var speakerRefreshID: UUID = UUID()
+    var speakerRefreshID: UUID { diarizationCoordinator.speakerRefreshID }
 
     /// Answer suggestion coordinator for the knowledge base feature.
     let answerSuggestion = AnswerSuggestionViewModel()
@@ -99,12 +102,6 @@ final class TransFlowViewModel {
     /// P1-4 修复：throttle rewriteJSONLWithCurrentSentences 的延迟 Task
     private var rewriteThrottleTask: Task<Void, Never>?
 
-    /// Realtime diarization service.
-    private var realtimeDiarizationService: RealtimeDiarizationService?
-
-    /// Diarization segments received so far, used for backfilling sentences.
-    private var diarizationSegments: [RealtimeDiarizationService.SpeakerSegment] = []
-
     // MARK: - Initialization
 
     init() {
@@ -131,6 +128,8 @@ final class TransFlowViewModel {
             if let engine = self?.speechEngine as? CloudCorrectedTranscriptionEngine {
                 engine.stop()
             }
+            // P2-2：清理 diarization
+            self?.diarizationCoordinator.reset()
             self?.stopAudioCapture?()
             if let observer = self?.lifecycleObserver {
                 NotificationCenter.default.removeObserver(observer)
@@ -549,9 +548,9 @@ final class TransFlowViewModel {
                         if !knownSpeakers.isEmpty {
                             diarizationService.setKnownSpeakers(knownSpeakers)
                         }
-                        self.realtimeDiarizationService = diarizationService
-                        self.diarizationSegments = []
-                        self.activeSpeakerCount = 0
+                        // P2-2 修复：通过 coordinator 管理 diarization 状态
+                        self.diarizationCoordinator.service = diarizationService
+                        self.diarizationCoordinator.activeSpeakerCount = 0
 
                         try diarizationService.start { [weak self] segments in
                             Task { @MainActor [weak self] in
@@ -680,14 +679,11 @@ final class TransFlowViewModel {
         recordingTask = nil
         currentRecordingFileName = nil
 
-        // Stop diarization
-        realtimeDiarizationService?.stop()
-        realtimeDiarizationService = nil
+        // P2-2 修复：通过 coordinator 清理 diarization 状态
+        diarizationCoordinator.stopSession()
         diarizationTask?.cancel()
         diarizationTask = nil
-        diarizationSegments = []
         isDiarizationEnabled = false
-        activeSpeakerCount = 0
         sessionStartTime = nil
 
         // P1-1 / P1-5 修复：取消引擎内部处理 Task，防止资源泄漏
@@ -748,76 +744,28 @@ final class TransFlowViewModel {
     // MARK: - Diarization
 
     /// Handle incoming diarization segments from the streaming pipeline.
-    private func handleDiarizationSegments(_ segments: [RealtimeDiarizationService.SpeakerSegment]) {
-        diarizationSegments.append(contentsOf: segments)
-        // 限制 diarizationSegments 大小，避免无限增长。
-        // 保留最近 500 段（约对应最近 ~15 分钟的音频，足够用于 backfill）。
-        // 早期不可靠的段（含 startSilent 填充）会被清除，避免错误分配覆盖后期正确分配。
-        if diarizationSegments.count > 500 {
-            diarizationSegments.removeFirst(diarizationSegments.count - 500)
-        }
-        activeSpeakerCount = realtimeDiarizationService?.speakerCount ?? 0
+    // P2-2 修复：Diarization 逻辑委托给 DiarizationCoordinator，ViewModel 只做状态协调
 
+    private func handleDiarizationSegments(_ segments: [RealtimeDiarizationService.SpeakerSegment]) {
+        diarizationCoordinator.appendSegments(segments)
+        diarizationCoordinator.activeSpeakerCount = diarizationCoordinator.service?.speakerCount ?? 0
         backfillSpeakerIds()
     }
 
     /// Assign a speaker to a sentence by matching its time range against diarization segments.
     private func assignSpeaker(for sentence: TranscriptionSentence) -> String? {
         guard let sessionStart = sessionStartTime else { return nil }
-        let sentStart = sentence.startTimestamp.timeIntervalSince(sessionStart)
-        let sentEnd = sentence.timestamp.timeIntervalSince(sessionStart)
-
-        var bestSpeaker: String?
-        var bestOverlap: Double = 0
-
-        for seg in diarizationSegments {
-            let overlapStart = max(sentStart, Double(seg.startTime))
-            let overlapEnd = min(sentEnd, Double(seg.endTime))
-            let overlap = max(0, overlapEnd - overlapStart)
-            if overlap > bestOverlap {
-                bestOverlap = overlap
-                bestSpeaker = seg.speakerId
-            }
-        }
-
-        return bestSpeaker
+        return diarizationCoordinator.assignSpeaker(for: sentence, sessionStart: sessionStart)
     }
 
     /// Backfill speakerId for sentences that were emitted before diarization results arrived.
     private func backfillSpeakerIds() {
         guard let sessionStart = sessionStartTime else { return }
-        var changed = false
-
-        // Only backfill recent unassigned sentences to avoid O(n×m) on long sessions
-        let maxBackfill = 50
-        let startIndex = max(0, sentences.count - maxBackfill)
-
-        for i in startIndex..<sentences.count where sentences[i].speakerId == nil {
-            let sentStart = sentences[i].startTimestamp.timeIntervalSince(sessionStart)
-            let sentEnd = sentences[i].timestamp.timeIntervalSince(sessionStart)
-
-            var bestSpeaker: String?
-            var bestOverlap: Double = 0
-
-            for seg in diarizationSegments {
-                let overlapStart = max(sentStart, Double(seg.startTime))
-                let overlapEnd = min(sentEnd, Double(seg.endTime))
-                let overlap = max(0, overlapEnd - overlapStart)
-                if overlap > bestOverlap {
-                    bestOverlap = overlap
-                    bestSpeaker = seg.speakerId
-                }
-            }
-
-            if let speaker = bestSpeaker {
-                sentences[i].speakerId = speaker
-                changed = true
-            }
+        guard let updates = diarizationCoordinator.computeBackfill(for: sentences, sessionStart: sessionStart) else { return }
+        for (index, speakerId) in updates {
+            sentences[index].speakerId = speakerId
         }
-
-        if changed {
-            rewriteJSONLWithCurrentSentences()
-        }
+        rewriteJSONLWithCurrentSentences()
     }
 
     /// P1-4 修复：debounce 版 rewriteJSONLWithCurrentSentences。
@@ -838,25 +786,38 @@ final class TransFlowViewModel {
 
     private func performRewriteJSONL() {
         guard let fileURL = jsonlStore.currentFileURL else { return }
+
+        // P1-2 修复：写入前先 flush writeHandle，确保缓冲数据已落盘
+        jsonlStore.flushWriteHandle()
+
         let allLines = jsonlStore.readAllLines(from: fileURL)
 
         var contentIndex = 0
         var updatedLines: [JSONLLine] = []
+        var hasChanges = false
 
         for line in allLines {
             switch line {
             case .content(let entry):
                 if contentIndex < sentences.count {
                     let sentence = sentences[contentIndex]
-                    let updated = JSONLContentEntry(
-                        startTime: entry.startTime,
-                        endTime: entry.endTime,
-                        originalText: entry.originalText,
-                        translatedText: entry.translatedText,
-                        speakerId: sentence.speakerId,
-                        speakerName: speakerNameOverrides[sentence.speakerId ?? ""]
-                    )
-                    updatedLines.append(.content(updated))
+                    let newSpeakerId = sentence.speakerId
+                    let newSpeakerName = diarizationCoordinator.speakerName(for: sentence.speakerId)
+                    // P1-2 修复：dirty checking，仅当 speakerId 或 speakerName 变化时才标记
+                    if entry.speakerId != newSpeakerId || entry.speakerName != newSpeakerName {
+                        hasChanges = true
+                        let updated = JSONLContentEntry(
+                            startTime: entry.startTime,
+                            endTime: entry.endTime,
+                            originalText: entry.originalText,
+                            translatedText: entry.translatedText,
+                            speakerId: newSpeakerId,
+                            speakerName: newSpeakerName
+                        )
+                        updatedLines.append(.content(updated))
+                    } else {
+                        updatedLines.append(line)
+                    }
                 } else {
                     updatedLines.append(line)
                 }
@@ -866,27 +827,44 @@ final class TransFlowViewModel {
             }
         }
 
+        // P1-2 修复：无变化时跳过写入
+        guard hasChanges else { return }
+
+        // P1-2 修复：逐行写入临时文件，避免在内存中拼接整个文件内容
+        let tempURL = fileURL.appendingPathExtension("tmp")
         let encoder = JSONEncoder()
         encoder.outputFormatting = []
-        var output = ""
-        for (i, line) in updatedLines.enumerated() {
-            if let data = try? encoder.encode(line),
-               let str = String(data: data, encoding: .utf8) {
-                if i > 0 { output += "\n" }
-                output += str
+
+        do {
+            FileManager.default.createFile(atPath: tempURL.path, contents: nil)
+            let tempHandle = try FileHandle(forWritingTo: tempURL)
+            for (i, line) in updatedLines.enumerated() {
+                if let data = try? encoder.encode(line),
+                   let str = String(data: data, encoding: .utf8) {
+                    if i > 0 { tempHandle.write(Data("\n".utf8)) }
+                    tempHandle.write(Data(str.utf8))
+                }
             }
+            tempHandle.closeFile()
+
+            try FileManager.default.replaceItem(at: fileURL, withItemAt: tempURL)
+
+            // P1-2 修复：原子替换后重新打开 writeHandle（旧 fd 指向旧 inode）
+            jsonlStore.reopenWriteHandle()
+        } catch {
+            ErrorLogger.shared.log(
+                "performRewriteJSONL failed: \(error.localizedDescription)",
+                source: "TransFlowViewModel"
+            )
+            try? FileManager.default.removeItem(at: tempURL)
         }
-        try? output.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
-    // MARK: - Speaker Naming
+    // MARK: - Speaker Naming (P2-2: 委托给 DiarizationCoordinator)
 
     /// Resolve the display name for a speaker ID, applying user overrides first.
     func displayName(for speakerId: String) -> String {
-        if let override = speakerNameOverrides[speakerId] {
-            return override
-        }
-        return SpeakerDisplayName.displayName(for: speakerId)
+        diarizationCoordinator.displayName(for: speakerId)
     }
 
     /// Build a context string from recent sentences for question answering.
@@ -898,12 +876,7 @@ final class TransFlowViewModel {
     /// Rename a speaker (anonymous or known) for the current session.
     /// Updates all matching sentences and persists the override.
     func renameSpeaker(anonymousId: String, to name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        speakerNameOverrides[anonymousId] = trimmed
-        speakerRefreshID = UUID()
-
+        diarizationCoordinator.renameSpeaker(anonymousId: anonymousId, to: name)
         rewriteJSONLWithCurrentSentences()
     }
 
@@ -916,7 +889,7 @@ final class TransFlowViewModel {
             originalText: sentence.text,
             translatedText: sentence.translation,
             speakerId: sentence.speakerId,
-            speakerName: speakerNameOverrides[sentence.speakerId ?? ""]
+            speakerName: diarizationCoordinator.speakerName(for: sentence.speakerId)
         )
         jsonlStore.appendEntry(entry: entry)
     }

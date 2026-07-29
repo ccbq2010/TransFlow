@@ -59,6 +59,8 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
 
     /// P1-5 修复：存储 processStream 内部的 Task，使 stop() 能够取消它
     nonisolated(unsafe) private var processingTask: Task<Void, Never>?
+    /// P1-1 修复：存储 forkTask 引用，使 stop() 能直接取消它（detached Task 不随父 Task 取消）
+    nonisolated(unsafe) private var forkTask: Task<Void, Never>?
 
     @MainActor static var isAvailable: Bool { true }
 
@@ -88,7 +90,9 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
                 bufferingPolicy: .bufferingOldest(256)
             )
 
-            let forkTask = Task.detached {
+            // P1-1 修复：存储 forkTask 引用以支持外部取消
+            // 保持 detached 以避免 actor 隔离阻塞，但 stop() 会显式取消
+            forkTask = Task.detached {
                 for await chunk in audioStream {
                     innerCont.yield(chunk)
                     tapCont.yield(chunk)
@@ -129,8 +133,10 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
         return outEvents
     }
 
-    /// P1-5 修复：取消 processStream 内部的处理 Task，防止快速重启时旧引擎泄漏。
+    /// P1-1 / P1-5 修复：取消 processStream 内部的处理 Task 和 forkTask，防止快速重启时旧引擎泄漏。
     func stop() {
+        forkTask?.cancel()
+        forkTask = nil
         processingTask?.cancel()
         processingTask = nil
     }

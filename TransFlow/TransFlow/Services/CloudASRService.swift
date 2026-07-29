@@ -80,10 +80,12 @@ struct CloudASRService: CloudASRServiceProtocol {
 
     private func transcribeChunked(wav: Data, maxChunkBytes: Int) async -> String? {
         let pcm = Array(wav.dropFirst(44))
-        // P2-4 修复：分块间增加 0.5s 重叠（16kHz 16-bit mono = 16000 bytes/s），
+        // P2-1 / P2-4 修复：分块间增加 0.5s 重叠（16kHz 16-bit mono = 16000 bytes/s），
         // 避免在单词中间硬切分导致识别质量下降
         let overlapBytes = min(16_000, maxChunkBytes / 4) // 0.5s or 25% of chunk
         let stride = max(1, maxChunkBytes - overlapBytes)
+        // P2-1 修复：最小块大小保护，最后一块不足 1s 则合并到前一块
+        let minLastChunkBytes = 16_000 // 1s of 16kHz 16-bit mono
         var chunks: [Data] = []
         var offset = 0
         while offset < pcm.count {
@@ -94,6 +96,12 @@ struct CloudASRService: CloudASRServiceProtocol {
             chunks.append(chunkWav)
             if end >= pcm.count { break }
             offset += stride
+        }
+        // P2-1 修复：如果最后一块太小且前面有块，合并到前一块
+        if chunks.count >= 2,
+           let lastChunk = chunks.last,
+           lastChunk.count - 44 < minLastChunkBytes {
+            chunks.removeLast()
         }
         // P0-3 修复：用索引保留原始顺序，避免并发完成顺序不一致导致结果乱序
         let results = await withTaskGroup(of: (Int, String?).self) { group -> [String] in
@@ -106,7 +114,47 @@ struct CloudASRService: CloudASRServiceProtocol {
             }
             return indexed.sorted { $0.0 < $1.0 }.map(\.1)
         }
-        return results.isEmpty ? nil : results.joined(separator: " ")
+        // P2-1 修复：重叠区域重复文本去重
+        // 相邻分片有 overlapBytes 的重叠，转写结果可能在重叠区域产生重复文本。
+        // 简单去重：如果后一个结果的开头是前一个结果结尾的子串，则去除。
+        guard !results.isEmpty else { return nil }
+        if results.count == 1 { return results[0] }
+        var deduped: [String] = [results[0]]
+        for prevResult in results.dropFirst() {
+            let prev = deduped.last!
+            // 尝试找到 prev 结尾与 curr 开头的最长公共子串，去除重复部分
+            let dedupedResult = Self.dedupOverlap(prev: prev, curr: prevResult)
+            deduped.append(dedupedResult)
+        }
+        return deduped.joined(separator: " ")
+    }
+
+    /// P2-1 修复：去除相邻分片重叠区域的重复文本。
+    /// 在前一个结果的尾部和后一个结果的开头之间寻找最长匹配，去除重复部分。
+    private static func dedupOverlap(prev: String, curr: String) -> String {
+        let prevWords = prev.components(separatedBy: .whitespaces)
+        let currWords = curr.components(separatedBy: .whitespaces)
+        guard !prevWords.isEmpty, !currWords.isEmpty else { return curr }
+
+        // 限制搜索范围：最多检查前一个结果最后 N 个词和后一个结果前 N 个词
+        let maxCheck = min(prevWords.count, currWords.count, 20)
+        var bestMatchLen = 0
+
+        for matchLen in stride(from: maxCheck, through: 1, by: -1) {
+            let prevTail = Array(prevWords.suffix(matchLen))
+            let currHead = Array(currWords.prefix(matchLen))
+            // 比较时不区分大小写
+            if prevTail.map({ $0.lowercased() }) == currHead.map({ $0.lowercased() }) {
+                bestMatchLen = matchLen
+                break
+            }
+        }
+
+        if bestMatchLen > 0 {
+            // 去除后一个结果开头的重复词
+            return currWords.dropFirst(bestMatchLen).joined(separator: " ")
+        }
+        return curr
     }
 
     // MARK: - Parsing

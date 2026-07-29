@@ -100,12 +100,12 @@ final class UpdateChecker {
         do {
             let release = try await fetchLatestRelease()
             guard let pkgAsset = release.assets.first(where: { $0.name.hasSuffix(".pkg") }) else {
-                status = .failed(message: "No PKG asset found in release")
+                status = .failed(message: String(localized: "update.error.no_pkg_asset"))
                 return
             }
 
             guard let url = URL(string: pkgAsset.browserDownloadURL) else {
-                status = .failed(message: "Invalid download URL")
+                status = .failed(message: String(localized: "update.error.invalid_url"))
                 return
             }
             status = .downloading(progress: 0)

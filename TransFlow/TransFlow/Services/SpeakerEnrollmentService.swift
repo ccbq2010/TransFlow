@@ -98,9 +98,9 @@ enum EnrollmentError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notPrepared:
-            return "Enrollment service not prepared. Call prepare() first."
+            return String(localized: "enrollment.error.not_prepared")
         case .insufficientAudio(let duration):
-            return String(format: "Need at least %.1fs of audio, got %.1fs.", SpeakerEnrollmentService.minimumDuration, duration)
+            return String(localized: "enrollment.error.insufficient_audio \(SpeakerEnrollmentService.minimumDuration) \(duration)")
         }
     }
 }

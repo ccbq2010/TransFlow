@@ -65,6 +65,22 @@ final class JSONLStore {
         writeHandle = nil
     }
 
+    // MARK: - Write Handle Management (P1-2)
+
+    /// P1-2 修复：flush writeHandle 缓冲数据到磁盘，确保后续原子写入不会丢失数据。
+    func flushWriteHandle() {
+        writeHandle?.synchronizeFile()
+    }
+
+    /// P1-2 修复：原子写入后重新打开 writeHandle 并 seek 到末尾。
+    /// 因为 `write(to:atomically:)` 会替换底层文件，旧的 FileHandle fd 仍指向旧 inode。
+    func reopenWriteHandle() {
+        guard let fileURL = currentFileURL else { return }
+        writeHandle?.closeFile()
+        writeHandle = try? FileHandle(forWritingTo: fileURL)
+        writeHandle?.seekToEndOfFile()
+    }
+
     // MARK: - Session Management
 
     @discardableResult

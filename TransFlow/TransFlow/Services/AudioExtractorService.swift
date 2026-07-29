@@ -27,7 +27,7 @@ final class AudioExtractorService: Sendable {
         reader.add(output)
 
         guard reader.startReading() else {
-            throw AudioExtractorError.readerFailed(reader.error?.localizedDescription ?? "Unknown error")
+            throw AudioExtractorError.readerFailed(reader.error?.localizedDescription ?? String(localized: "audio_extractor.error.unknown"))
         }
 
         var allSamples: [Float] = []
@@ -52,7 +52,7 @@ final class AudioExtractorService: Sendable {
         }
 
         guard reader.status == .completed else {
-            throw AudioExtractorError.readerFailed(reader.error?.localizedDescription ?? "Incomplete read")
+            throw AudioExtractorError.readerFailed(reader.error?.localizedDescription ?? String(localized: "audio_extractor.error.incomplete_read"))
         }
 
         return allSamples
@@ -109,9 +109,9 @@ enum AudioExtractorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noAudioTrack:
-            return "No audio track found in the file."
+            return String(localized: "audio_extractor.error.no_audio_track")
         case .readerFailed(let message):
-            return "Audio extraction failed: \(message)"
+            return String(localized: "audio_extractor.error.extraction_failed \(message)")
         }
     }
 }
