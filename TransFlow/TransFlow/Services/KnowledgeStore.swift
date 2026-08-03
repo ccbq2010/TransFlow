@@ -35,7 +35,8 @@ final class KnowledgeStore {
         appSupportDir.appendingPathComponent("knowledge_chunks.json")
     }
     private var appSupportDir: URL {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         return base.appendingPathComponent(bundleID, isDirectory: true)
     }

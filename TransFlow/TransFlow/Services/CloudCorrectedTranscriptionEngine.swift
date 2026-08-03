@@ -58,9 +58,37 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
     private let service: any CloudASRServiceProtocol
 
     /// P1-5 修复：存储 processStream 内部的 Task，使 stop() 能够取消它
-    nonisolated(unsafe) private var processingTask: Task<Void, Never>?
+    /// 用锁保护：后台 Task 写入，stop()（MainActor）读取/清空，两者并发。
+    private let taskLock = NSLock()
+    nonisolated(unsafe) private var _processingTask: Task<Void, Never>?
     /// P1-1 修复：存储 forkTask 引用，使 stop() 能直接取消它（detached Task 不随父 Task 取消）
-    nonisolated(unsafe) private var forkTask: Task<Void, Never>?
+    nonisolated(unsafe) private var _forkTask: Task<Void, Never>?
+
+    private var processingTask: Task<Void, Never>? {
+        get {
+            taskLock.lock()
+            defer { taskLock.unlock() }
+            return _processingTask
+        }
+        set {
+            taskLock.lock()
+            _processingTask = newValue
+            taskLock.unlock()
+        }
+    }
+
+    private var forkTask: Task<Void, Never>? {
+        get {
+            taskLock.lock()
+            defer { taskLock.unlock() }
+            return _forkTask
+        }
+        set {
+            taskLock.lock()
+            _forkTask = newValue
+            taskLock.unlock()
+        }
+    }
 
     @MainActor static var isAvailable: Bool { true }
 
@@ -126,7 +154,7 @@ final class CloudCorrectedTranscriptionEngine: TranscriptionEngineProtocol {
             }
 
             tapTask.cancel()
-            forkTask.cancel()
+            forkTask?.cancel()
             outContinuation.finish()
         }
 

@@ -59,17 +59,10 @@ struct HotwordCorrector: Sendable {
             }
         }
 
-        // Chinese or mixed: simple case-insensitive substring replacement
-        let lowerFrom = from.lowercased()
-        var result = text
-        var searchRange = result.startIndex..<result.endIndex
-
-        while let foundRange = result[searchRange].lowercased().range(of: lowerFrom) {
-            let absoluteRange = foundRange.lowerBound..<foundRange.upperBound
-            result.replaceSubrange(absoluteRange, with: to)
-            searchRange = absoluteRange.upperBound..<result.endIndex
-        }
-
-        return result
+        // Chinese or mixed: single-pass case-insensitive replacement.
+        // Previously used a loop with .lowercased() per iteration, which was O(n*m)
+        // in text length × number of matches. replacingOccurrences does a single
+        // non-overlapping left-to-right pass, which is O(n) in text length.
+        return text.replacingOccurrences(of: from, with: to, options: .caseInsensitive)
     }
 }

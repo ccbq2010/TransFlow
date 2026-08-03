@@ -23,7 +23,8 @@ final class SpeakerProfilesStore {
     private let decoder = JSONDecoder()
 
     private var storageURL: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         return appSupport
             .appendingPathComponent(bundleID, isDirectory: true)

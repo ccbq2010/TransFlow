@@ -121,7 +121,7 @@ struct CloudASRService: CloudASRServiceProtocol {
         if results.count == 1 { return results[0] }
         var deduped: [String] = [results[0]]
         for prevResult in results.dropFirst() {
-            let prev = deduped.last!
+            guard let prev = deduped.last else { continue }
             // 尝试找到 prev 结尾与 curr 开头的最长公共子串，去除重复部分
             let dedupedResult = Self.dedupOverlap(prev: prev, curr: prevResult)
             deduped.append(dedupedResult)

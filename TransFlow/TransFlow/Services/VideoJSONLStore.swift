@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Manages JSONL persistence for video transcription sessions.
 /// Stores files in `video_transcriptions/` under the app's Application Support directory.
@@ -12,7 +13,7 @@ final class VideoJSONLStore {
     private(set) var currentFileURL: URL?
 
     /// P2-1 修复：持久 writeHandle，避免每次 append 都 open/close
-    private var writeHandle: FileHandle?
+    nonisolated(unsafe) private var writeHandle: FileHandle?
 
     // MARK: - Private
 
@@ -21,7 +22,8 @@ final class VideoJSONLStore {
     private let decoder = JSONDecoder()
 
     private var videoTranscriptionsDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         return appSupport
             .appendingPathComponent(bundleID, isDirectory: true)
@@ -32,11 +34,11 @@ final class VideoJSONLStore {
 
     init() {
         ensureDirectoryExists()
-        // P2-1 修复：监听应用终止通知
+        // 监听应用终止通知，确保 writeHandle 被正确关闭
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleWillTerminate),
-            name: .willTerminate,
+            name: NSApplication.willTerminateNotification,
             object: nil
         )
     }
@@ -47,6 +49,7 @@ final class VideoJSONLStore {
         NotificationCenter.default.removeObserver(self)
     }
 
+    @MainActor
     @objc private func handleWillTerminate() {
         writeHandle?.synchronizeFile()
         writeHandle?.closeFile()
@@ -244,7 +247,17 @@ final class VideoJSONLStore {
 
         let content = newLines.joined(separator: "\n")
         do {
+            // 原子替换前 flush writeHandle（与 JSONLStore 保持一致），
+            // 避免未落盘数据在文件替换后丢失。
+            writeHandle?.synchronizeFile()
             try content.write(to: url, atomically: true, encoding: .utf8)
+            // 原子写入替换了底层文件，若更新的是当前会话文件，
+            // 必须重开 handle，否则后续 appendRaw 会写入已被替换的旧 inode。
+            if url == currentFileURL {
+                writeHandle?.closeFile()
+                writeHandle = try? FileHandle(forWritingTo: url)
+                writeHandle?.seekToEndOfFile()
+            }
             return true
         } catch {
             return false

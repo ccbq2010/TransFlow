@@ -57,7 +57,8 @@ final class WhisperKitModelManager {
     /// 检查模型目录是否存在于 HuggingFace 默认下载路径。
     /// WhisperKit 默认下载到 ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<modelName>
     private static func modelExistsOnDisk(modelName: String) -> Bool {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
         let modelPath = documents
             .appending(component: "huggingface")
             .appending(component: "models")

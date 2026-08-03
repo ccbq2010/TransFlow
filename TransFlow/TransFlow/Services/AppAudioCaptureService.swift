@@ -151,10 +151,13 @@ final class AppAudioCaptureService: NSObject, Sendable {
         // Create audio output handler (handles 48kHz → 16kHz conversion)
         let handler = AudioStreamHandler(targetSampleRate: targetSampleRate)
 
+        // Use a dedicated serial queue so all audio callbacks are serialized,
+        // preventing concurrent access to the handler's converter state.
+        let audioQueue = DispatchQueue(label: "com.transflow.appaudio.audio", qos: .userInteractive)
         try scStream.addStreamOutput(
             handler,
             type: .audio,
-            sampleHandlerQueue: DispatchQueue.global(qos: .userInteractive)
+            sampleHandlerQueue: audioQueue
         )
         // Also register as screen output so ScreenCaptureKit doesn't log
         // "stream output NOT found. Dropping frame" errors for video frames.
@@ -220,10 +223,13 @@ final class AppAudioCaptureService: NSObject, Sendable {
 
         let handler = AudioStreamHandler(targetSampleRate: targetSampleRate)
 
+        // Use a dedicated serial queue so all audio callbacks are serialized,
+        // preventing concurrent access to the handler's converter state.
+        let audioQueue = DispatchQueue(label: "com.transflow.systemaudio.audio", qos: .userInteractive)
         try scStream.addStreamOutput(
             handler,
             type: .audio,
-            sampleHandlerQueue: DispatchQueue.global(qos: .userInteractive)
+            sampleHandlerQueue: audioQueue
         )
         try scStream.addStreamOutput(
             handler,

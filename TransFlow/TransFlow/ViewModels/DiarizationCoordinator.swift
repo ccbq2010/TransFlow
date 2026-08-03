@@ -1,16 +1,17 @@
 import Foundation
+import FluidAudio
 
 /// P2-2 修复：从 TransFlowViewModel 拆分的 Diarization 协调器。
 ///
 /// 负责：
-/// - 管理 RealtimeDiarizationService 生命周期
+/// - 管理 RealtimeDiarizationService 完整生命周期（创建、初始化、启动、停止）
 /// - 维护 diarization segments 缓存
 /// - 根据 segment 时间范围匹配 speaker ID
 /// - Backfill 历史句子的 speaker ID
 /// - Speaker 显示名解析与重命名
 ///
-/// ViewModel 通过委托方式调用，状态属性（sentences、speakerNameOverrides 等）
-/// 仍保留在 ViewModel 中以维持 SwiftUI 观察链。
+/// ViewModel 通过 startSession / feedAudio / stopSession 委托调用，
+/// 不再直接访问 service 属性。
 @Observable
 @MainActor
 final class DiarizationCoordinator {
@@ -33,14 +34,37 @@ final class DiarizationCoordinator {
     // MARK: - Lifecycle
 
     /// Start a new diarization session.
-    func startSession(speakerCount: Int, onSegments: @escaping ([RealtimeDiarizationService.SpeakerSegment]) -> Void) {
-        let svc = RealtimeDiarizationService(targetSpeakerCount: speakerCount)
-        svc.onSegmentsUpdated = { segments in
+    ///
+    /// Creates and initializes the `RealtimeDiarizationService` with the given models
+    /// and known speakers, then starts the diarization pipeline. The `onSegments`
+    /// callback is invoked on the MainActor whenever new segments are produced.
+    ///
+    /// - Parameters:
+    ///   - models: Pre-loaded diarization models (from `DiarizationModelManager`).
+    ///   - knownSpeakers: Pre-enrolled known speakers (empty = no enrollment).
+    ///   - onSegments: Callback invoked with new speaker segments.
+    /// - Throws: If `RealtimeDiarizationService` creation or `start()` fails.
+    func startSession(
+        models: DiarizerModels,
+        knownSpeakers: [Speaker],
+        onSegments: @escaping @Sendable ([RealtimeDiarizationService.SpeakerSegment]) -> Void
+    ) throws {
+        let svc = try RealtimeDiarizationService()
+        svc.initialize(models: models)
+        if !knownSpeakers.isEmpty {
+            svc.setKnownSpeakers(knownSpeakers)
+        }
+        try svc.start { segments in
             Task { @MainActor in onSegments(segments) }
         }
-        svc.start()
         service = svc
-        activeSpeakerCount = speakerCount
+        activeSpeakerCount = 0
+    }
+
+    /// Feed audio samples to the active diarization service.
+    /// No-op if no session is active.
+    func feedAudio(_ samples: [Float]) {
+        service?.feedAudio(samples)
     }
 
     /// Stop the current diarization session.

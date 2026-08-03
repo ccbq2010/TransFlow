@@ -117,7 +117,10 @@ final class AccuracyBenchmarks: XCTestCase {
             let hypothesis: String
             let status: String
             do {
-                hypothesis = try await engine.transcribeWholeFile(audio)
+                // 按 eval case 的语言传入 WhisperKit language code，
+                // 避免 language: nil 时 WhisperKit 对较长中文音频做翻译而非转写
+                let lang: String? = evalCase.language == "zh" ? "zh" : (evalCase.language == "en" ? "en" : nil)
+                hypothesis = try await engine.transcribeWholeFile(audio, language: lang)
                 status = "success"
                 anySuccess = true
             } catch {

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "TransFlow 识别率评测集 (WER/CER evaluation set). 每个 case 包含 <id>.wav (16kHz mono) 与 <id>.ref.txt (黄金转录). 注意: 当前仅为冒烟级基线, 需补充真实噪声/多人场景以获得代表性 WER.",
+  "description": "TransFlow 识别率评测集 (WER/CER). EN=LibriSpeech 真实人声; ZH=macOS TTS 合成(文本对齐, 仅回归/冒烟). 代表性仍需补充真实多人噪声场景.",
   "cases": [
     {
       "id": "jfk",
@@ -13,6 +13,186 @@
       "language": "zh",
       "synthetic": true,
       "note": "macOS TTS (Tingting) 合成; 仅用于 CER 路径冒烟, 不代表真实场景, 不计入代表性 WER"
+    },
+    {
+      "id": "en_short_1",
+      "language": "en",
+      "synthetic": true,
+      "note": "macOS TTS (Samantha); 短句"
+    },
+    {
+      "id": "en_short_2",
+      "language": "en",
+      "synthetic": true,
+      "note": "macOS TTS (Samantha); 短句"
+    },
+    {
+      "id": "en_medium_1",
+      "language": "en",
+      "synthetic": true,
+      "note": "macOS TTS (Samantha); 中等长度"
+    },
+    {
+      "id": "en_medium_2",
+      "language": "en",
+      "synthetic": true,
+      "note": "macOS TTS (Samantha); 中等长度"
+    },
+    {
+      "id": "en_long_1",
+      "language": "en",
+      "synthetic": true,
+      "note": "macOS TTS (Samantha); 长句"
+    },
+    {
+      "id": "en_tech_1",
+      "language": "en",
+      "synthetic": true,
+      "note": "macOS TTS (Samantha); 技术词汇"
+    },
+    {
+      "id": "zh_short_1",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting); 短句"
+    },
+    {
+      "id": "zh_short_2",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting); 短句"
+    },
+    {
+      "id": "zh_medium_1",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting); 中等长度"
+    },
+    {
+      "id": "zh_medium_2",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting); 中等长度"
+    },
+    {
+      "id": "zh_long_1",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting); 长句"
+    },
+    {
+      "id": "zh_tech_1",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting); 技术词汇"
+    },
+    {
+      "id": "zh_tw_1",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Meijia); 繁体中文短句"
+    },
+    {
+      "id": "zh_tw_2",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Meijia); 繁体中文中等长度"
+    },
+    {
+      "id": "en_1089-134686-0000",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0000 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0001",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0001 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0002",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0002 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0003",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0003 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0004",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0004 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0005",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0005 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0006",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0006 (真实人声, 公有领域)"
+    },
+    {
+      "id": "en_1089-134686-0007",
+      "language": "en",
+      "synthetic": false,
+      "note": "LibriSpeech test-clean/1089/134686/1089-134686-0007 (真实人声, 公有领域)"
+    },
+    {
+      "id": "zh_nihao",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_tianqi",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_shuzi",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_daima",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_huiyi",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_kafei",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_jishu",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
+    },
+    {
+      "id": "zh_yingwen",
+      "language": "zh",
+      "synthetic": true,
+      "note": "macOS TTS (Tingting) 合成普通话; 文本对齐, 用于 CER 回归"
     }
   ]
 }

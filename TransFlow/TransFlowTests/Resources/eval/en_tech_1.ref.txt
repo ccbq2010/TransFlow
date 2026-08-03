@@ -1,0 +1,1 @@
+WhisperKit is a Swift package that provides on-device speech recognition using Core ML models. It supports multiple languages and offers real-time streaming capabilities.

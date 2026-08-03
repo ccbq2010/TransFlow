@@ -27,7 +27,8 @@ final class AudioRecordingService: @unchecked Sendable {
 
     private static var recordingsDirectory: URL {
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         return appSupport
             .appendingPathComponent(bundleID, isDirectory: true)

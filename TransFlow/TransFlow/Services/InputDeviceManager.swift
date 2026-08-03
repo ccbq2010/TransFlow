@@ -158,9 +158,17 @@ final class InputDeviceManager: ObservableObject {
 
         var out: [InputDevice] = []
         out.reserveCapacity(ids.count)
+        // BUG-FIX-DUP: macOS returns multiple distinct AudioDeviceIDs that share the same
+        // device UID (virtual devices like BlackHole 2ch expose per-stream subdevices that
+        // all report the same UID and human-readable name). Without dedup, the Settings
+        // picker showed the same device three times. Dedupe by UID; the first deviceID
+        // wins. (Choosing by UID is what the user-facing logic already uses.)
+        var seenUIDs: Set<String> = []
         for id in ids {
             guard let info = describe(id) else { continue }
-            out.append(info)
+            if seenUIDs.insert(info.uid).inserted {
+                out.append(info)
+            }
         }
         out.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         let defaultUID = out.first(where: { $0.deviceID == defaultID })?.uid
@@ -205,7 +213,10 @@ final class InputDeviceManager: ObservableObject {
         let name = cfStringProp(id, kAudioDevicePropertyDeviceNameCFString)
         let mfg = stringProp(id, kAudioDevicePropertyDeviceManufacturer)
         let transport = stringProp(id, kAudioDevicePropertyTransportType)
-        let isVirtual = ["virtual", "aggregate", "airplay", "bluetooth"]
+        // NOTE: Bluetooth is deliberately NOT treated as virtual — a Bluetooth
+        // headset mic is a real capture device and must not be flagged as
+        // "only captures audio routed to it".
+        let isVirtual = ["virtual", "aggregate", "airplay"]
             .contains { transport.localizedCaseInsensitiveContains($0) }
             || mfg.localizedCaseInsensitiveContains("existential")
             || mfg.localizedCaseInsensitiveContains("rogue amoeba")

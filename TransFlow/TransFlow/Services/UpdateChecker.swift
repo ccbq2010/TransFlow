@@ -124,7 +124,8 @@ final class UpdateChecker {
 
             let tempURL = try await delegate.waitForCompletion()
 
-            let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+            let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
             let destURL = downloadsDir.appendingPathComponent("TransFlow-\(version).pkg")
 
             let fm = FileManager.default
@@ -164,7 +165,6 @@ final class UpdateChecker {
 
 private final class PKGDownloadDelegate: NSObject, URLSessionDownloadDelegate, Sendable {
     private let onProgress: @Sendable (Double) -> Void
-    private let continuation: UnsafeContinuation<URL, any Error>?
 
     private final class Box: @unchecked Sendable {
         var continuation: CheckedContinuation<URL, any Error>?
@@ -173,7 +173,6 @@ private final class PKGDownloadDelegate: NSObject, URLSessionDownloadDelegate, S
 
     init(onProgress: @escaping @Sendable (Double) -> Void) {
         self.onProgress = onProgress
-        self.continuation = nil
         super.init()
     }
 

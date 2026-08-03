@@ -11,7 +11,8 @@ import Foundation
 final class VADService: Sendable {
     /// RMS energy threshold below which audio is considered silence.
     /// Tuned for 16kHz mono Float32 audio.
-    private let silenceThreshold: Float
+    /// Internal so WhisperKitSpeechEngine can read it for its own frame-level VAD.
+    internal let silenceThreshold: Float
 
     /// Minimum duration (seconds) of continuous speech to keep a segment.
     /// Filters out short noise bursts.

@@ -19,14 +19,24 @@ final class AudioCaptureService: @unchecked Sendable {
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
+        // CRITICAL (P0-AUDIO-1 修复): AVAudioEngine 的 I/O 图是懒初始化的，
+        // `engine.inputNode.audioUnit` 在 `prepare()` / `start()` 之前是 **nil**。
+        // 若不先 prepare()，下面 bindInputDevice 里读 `audioUnit` 会拿到 nil →
+        // kAudioOutputUnitProperty_CurrentDevice 绑定静默失败（return false）→
+        // 引擎停留在系统默认输入（通常是虚拟聚合设备 CADefaultDeviceAggregate）
+        // → 完全采集不到真实麦克风声音。
+        // `prepare()` 仅初始化音频单元、不启动 IO，正好让 audioUnit 就绪以便绑定。
+        engine.prepare()
         var inputFormat = inputNode.outputFormat(forBus: 0)
 
-        // Log which input device the system actually gave us — if the user picked
-        // BlackHole 2ch (or any other virtual device) as macOS default input, this
-        // will be that virtual device's UID, NOT the real microphone.
-        let resolvedName = AudioCaptureService.currentInputDeviceName()
-        let resolvedUID = AudioCaptureService.currentInputDeviceUID()
-        NSLog("[AudioCapture] input device (initial): name=\(resolvedName) uid=\(resolvedUID) format=\(inputFormat.sampleRate)Hz/\(inputFormat.channelCount)ch")
+        // Log the device the engine's input node is ACTUALLY bound to right now,
+        // read from the audio unit's kAudioOutputUnitProperty_CurrentDevice (not from
+        // kAudioHardwarePropertyDefaultInputDevice). Before any explicit bind the
+        // engine mirrors the system default; after a bind it shows the device we
+        // really capture from. This is the source of truth for the diagnostic.
+        let initialID = Self.boundDeviceID(on: engine) ?? 0
+        let (initialName, initialUID) = Self.nameAndUID(forDeviceID: initialID)
+        NSLog("[AudioCapture] input device (initial): name=\(initialName) uid=\(initialUID) format=\(inputFormat.sampleRate)Hz/\(inputFormat.channelCount)ch")
 
         // If a specific device UID was requested, rebind the input node's underlying
         // AudioUnit to that device. Must happen BEFORE engine.start() and before
@@ -39,26 +49,78 @@ final class AudioCaptureService: @unchecked Sendable {
             // actual device we'll be capturing from. (Different devices can report
             // very different sample rates and channel counts.)
             inputFormat = inputNode.outputFormat(forBus: 0)
-            let reboundName = AudioCaptureService.currentInputDeviceName()
-            let reboundUID = AudioCaptureService.currentInputDeviceUID()
-            NSLog("[AudioCapture] input device (after bind): name=\(reboundName) uid=\(reboundUID) format=\(inputFormat.sampleRate)Hz/\(inputFormat.channelCount)ch bound=\(bound)")
+            let (boundName, boundUID) = Self.nameAndUID(forDeviceID: deviceID)
+            NSLog("[AudioCapture] input device (after bind): name=\(boundName) uid=\(boundUID) format=\(inputFormat.sampleRate)Hz/\(inputFormat.channelCount)ch bound=\(bound)")
+            if !bound {
+                ErrorLogger.shared.log(
+                    "Failed to bind input device '\(boundName)' (uid=\(boundUID)). Engine will stay on system default — audio capture may be silent. " +
+                    "Likely cause: the audio unit was not initialized before bind, or the device is no longer available.",
+                    source: "AudioCapture"
+                )
+            }
         } else if let deviceUID, !deviceUID.isEmpty {
             NSLog("[AudioCapture] WARN: requested deviceUID=\(deviceUID) not found among current inputs; falling back to system default")
+        } else {
+            // P0-A: No device UID specified (System Default).
+            // Check if the resolved default is a virtual/aggregate device (e.g. BlackHole,
+            // Loopback, CADefaultDeviceAggregate). These devices often capture silence
+            // when no app is routing audio to them, producing near-zero RMS → VAD strips
+            // everything → WhisperKit hallucinates on near-silent audio.
+            // If virtual, warn loudly and try to auto-fallback to the first real microphone.
+            let isVirtualDefault = Self.isVirtualDevice(deviceID: initialID)
+            if isVirtualDefault {
+                ErrorLogger.shared.log(
+                    "⚠️ System default input '\(initialName)' is a virtual/aggregate device — " +
+                    "may capture silence. Attempting auto-fallback to first real microphone.",
+                    source: "AudioCapture"
+                )
+                NSLog("[AudioCapture] ⚠️ System default '\(initialName)' is virtual — attempting auto-fallback")
+
+                // Find first non-virtual input device using CoreAudio directly
+                // (InputDeviceManager is @MainActor; cannot access from here).
+                let realMic = Self.findFirstRealMicrophone()
+                if let (realName, realUID, realID) = realMic {
+                    let bound = Self.bindInputDevice(deviceID: realID, on: engine)
+                    inputFormat = inputNode.outputFormat(forBus: 0)
+                    NSLog("[AudioCapture] auto-fallback: name=\(realName) uid=\(realUID) bound=\(bound)")
+                    ErrorLogger.shared.log(
+                        "Auto-fallback to '\(realName)' (uid=\(realUID), bound=\(bound))",
+                        source: "AudioCapture"
+                    )
+                } else {
+                    ErrorLogger.shared.log(
+                        "No non-virtual input device found — all available inputs are virtual. Audio capture will likely be silent.",
+                        source: "AudioCapture"
+                    )
+                }
+            }
         }
 
         // Target format: 16kHz mono Float32
         guard let targetFormat = AVAudioFormat(
             standardFormatWithSampleRate: 16_000, channels: 1
         ) else {
+            ErrorLogger.shared.log(
+                "Failed to create target audio format (16kHz mono)",
+                source: "AudioCapture"
+            )
             continuation.finish()
             return (stream, {})
         }
 
         // Create converter from input format to 16kHz mono
         guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            ErrorLogger.shared.log(
+                "Failed to create audio converter from \(inputFormat.sampleRate)Hz/\(inputFormat.channelCount)ch to 16kHz/1ch",
+                source: "AudioCapture"
+            )
             continuation.finish()
             return (stream, {})
         }
+
+        // P0-A: Counter for diagnostic logging of the first N audio chunks.
+        // Placed outside the tap closure because closures cannot capture mutable statics.
+        nonisolated(unsafe) var chunkLogCount: Int32 = 0
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
             // CRITICAL: output capacity MUST be derived from the actual input buffer size.
@@ -94,6 +156,14 @@ final class AudioCaptureService: @unchecked Sendable {
 
             // Calculate normalized audio level: RMS → dB → 0-1
             let level = Self.calculateNormalizedLevel(samples: samples)
+
+            // P0-A: Log audio level for the first 20 chunks to help diagnose
+            // silent/virtual device issues. RMS < 0.01 → VAD will strip it.
+            let idx = OSAtomicIncrement32(&chunkLogCount)
+            if idx <= 20 {
+                let rms = sqrt(samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count))
+                NSLog("[AudioCapture] chunk #\(idx) RMS=\(String(format: "%.4f", rms)) level=\(String(format: "%.3f", level)) frames=\(frameCount)")
+            }
 
             let chunk = AudioChunk(
                 samples: samples,
@@ -180,21 +250,31 @@ final class AudioCaptureService: @unchecked Sendable {
         }
     }
 
-    // MARK: - Default input device introspection (for diagnostics / device picker UI)
+    // MARK: - Input device introspection (for diagnostics / device picker UI)
 
-    /// Human-readable name of the system default input device, e.g. "Mac mini Speakers",
-    /// "AirPods Pro", "BlackHole 2ch". Returns "" if unavailable.
-    nonisolated static func currentInputDeviceName() -> String {
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var devId: AudioDeviceID = 0
+    /// The AudioDeviceID actually bound to the engine's input node right now, read
+    /// from the audio unit's `kAudioOutputUnitProperty_CurrentDevice`. This is the
+    /// device the engine will really capture from — which may differ from the
+    /// macOS system default once we've explicitly bound a specific device.
+    nonisolated private static func boundDeviceID(on engine: AVAudioEngine) -> AudioDeviceID? {
+        guard let au = engine.inputNode.audioUnit else { return nil }
+        var dev: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &devId
-        ) == noErr, devId != 0 else { return "" }
+        let status = AudioUnitGetProperty(
+            au,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &dev,
+            &size
+        )
+        return status == noErr ? dev : nil
+    }
+
+    /// Resolve an AudioDeviceID to its (name, UID) pair for logging.
+    nonisolated private static func nameAndUID(forDeviceID id: AudioDeviceID) -> (String, String) {
+        guard id != 0 else { return ("", "") }
+
         var nameAddr = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceNameCFString,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -202,25 +282,12 @@ final class AudioCaptureService: @unchecked Sendable {
         )
         var nameRef: Unmanaged<CFString>?
         var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        guard AudioObjectGetPropertyData(
-            devId, &nameAddr, 0, nil, &nameSize, &nameRef
-        ) == noErr, let cf = nameRef?.takeRetainedValue() else { return "" }
-        return cf as String
-    }
+        var name = ""
+        if AudioObjectGetPropertyData(id, &nameAddr, 0, nil, &nameSize, &nameRef) == noErr,
+           let cf = nameRef?.takeRetainedValue() {
+            name = cf as String
+        }
 
-    /// Stable UID of the system default input device (e.g. "AppleHDAEngineInput:1").
-    /// Returns "" if unavailable.
-    nonisolated static func currentInputDeviceUID() -> String {
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var devId: AudioDeviceID = 0
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &devId
-        ) == noErr, devId != 0 else { return "" }
         var uidAddr = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -228,10 +295,111 @@ final class AudioCaptureService: @unchecked Sendable {
         )
         var uidRef: Unmanaged<CFString>?
         var uidSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        guard AudioObjectGetPropertyData(
-            devId, &uidAddr, 0, nil, &uidSize, &uidRef
-        ) == noErr, let cf = uidRef?.takeRetainedValue() else { return "" }
-        return cf as String
+        var uid = ""
+        if AudioObjectGetPropertyData(id, &uidAddr, 0, nil, &uidSize, &uidRef) == noErr,
+           let cf = uidRef?.takeRetainedValue() {
+            uid = cf as String
+        }
+
+        return (name, uid)
+    }
+
+    /// Find the first non-virtual input device by enumerating CoreAudio devices directly.
+    /// Returns (name, uid, deviceID) or nil if all inputs are virtual.
+    nonisolated private static func findFirstRealMicrophone() -> (name: String, uid: String, id: AudioDeviceID)? {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size) == noErr,
+              size > 0 else { return nil }
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+        var ids = [AudioDeviceID](repeating: 0, count: count)
+        _ = ids.withUnsafeMutableBytes { p in
+            AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, p.baseAddress!)
+        }
+        for id in ids {
+            // Skip virtual devices
+            if isVirtualDevice(deviceID: id) { continue }
+            // Check it has input channels
+            var scopeAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreamConfiguration,
+                mScope: kAudioObjectPropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            var cfgSize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(id, &scopeAddr, 0, nil, &cfgSize) == noErr, cfgSize > 0 else { continue }
+            let buf = UnsafeMutableRawPointer.allocate(byteCount: Int(cfgSize), alignment: 1)
+            defer { buf.deallocate() }
+            guard AudioObjectGetPropertyData(id, &scopeAddr, 0, nil, &cfgSize, buf) == noErr else { continue }
+            let list = buf.assumingMemoryBound(to: AudioBufferList.self).pointee
+            guard list.mNumberBuffers > 0 else { continue }
+            // Found a real input device
+            let (name, uid) = nameAndUID(forDeviceID: id)
+            return (name, uid, id)
+        }
+        return nil
+    }
+
+    /// Check if the given AudioDeviceID is a virtual/aggregate device (BlackHole, Loopback, etc.).
+    /// Uses the same heuristics as InputDeviceManager.isVirtual.
+    nonisolated private static func isVirtualDevice(deviceID: AudioDeviceID) -> Bool {
+        guard deviceID != 0 else { return false }
+
+        // Read transport type
+        var tAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transport = ""
+        if let ref: Unmanaged<CFString> = Self.readProperty(deviceID, &tAddr) {
+            transport = ref.takeRetainedValue() as String
+        }
+
+        // Read manufacturer
+        var mAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceManufacturer,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var mfg = ""
+        if let ref: Unmanaged<CFString> = Self.readProperty(deviceID, &mAddr) {
+            mfg = ref.takeRetainedValue() as String
+        }
+
+        // Read device name
+        var nAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceNameCFString,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var name = ""
+        var nameRef: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        if AudioObjectGetPropertyData(deviceID, &nAddr, 0, nil, &nameSize, &nameRef) == noErr,
+           let cf = nameRef?.takeRetainedValue() {
+            name = cf as String
+        }
+
+        return ["virtual", "aggregate", "airplay"]
+            .contains { transport.localizedCaseInsensitiveContains($0) }
+            || mfg.localizedCaseInsensitiveContains("existential")
+            || mfg.localizedCaseInsensitiveContains("rogue amoeba")
+            || name.localizedCaseInsensitiveContains("blackhole")
+            || name.localizedCaseInsensitiveContains("loopback")
+            || name.localizedCaseInsensitiveContains("multi-output")
+            || name.localizedCaseInsensitiveContains("aggregate")
+    }
+
+    /// Helper: read a CFString property from an AudioDeviceID.
+    nonisolated private static func readProperty(_ id: AudioDeviceID, _ addr: inout AudioObjectPropertyAddress) -> Unmanaged<CFString>? {
+        var ref: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &ref) == noErr else { return nil }
+        return ref
     }
 
     /// Calculate normalized audio level from samples: RMS → dB → 0-1 range.

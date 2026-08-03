@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Manages JSONL file persistence in the app's internal `transcriptions` directory.
 @MainActor
@@ -14,7 +15,7 @@ final class JSONLStore {
     private(set) var currentFileURL: URL?
 
     /// Reusable FileHandle for the current session (avoids repeated open/close).
-    private var writeHandle: FileHandle?
+    nonisolated(unsafe) private var writeHandle: FileHandle?
 
     // MARK: - Private
 
@@ -23,7 +24,8 @@ final class JSONLStore {
     private let decoder = JSONDecoder()
 
     private var transcriptionsDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         return appSupport
             .appendingPathComponent(bundleID, isDirectory: true)
@@ -31,7 +33,8 @@ final class JSONLStore {
     }
 
     private var recordingsDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         return appSupport
             .appendingPathComponent(bundleID, isDirectory: true)
@@ -46,7 +49,7 @@ final class JSONLStore {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleWillTerminate),
-            name: .willTerminate,
+            name: NSApplication.willTerminateNotification,
             object: nil
         )
     }
@@ -301,7 +304,16 @@ final class JSONLStore {
 
         let content = newLines.joined(separator: "\n")
         do {
+            // P1-2 与 performRewriteJSONL 一致：原子替换前 flush writeHandle，
+            // 避免 writeHandle 中未落盘的数据在文件被替换后丢失。
+            flushWriteHandle()
             try content.write(to: url, atomically: true, encoding: .utf8)
+            // 原子写入替换了底层文件，旧 writeHandle 的 fd 仍指向旧 inode。
+            // 若更新的是当前会话文件，必须重开 handle，否则后续 appendRaw 会写入
+            // 已被删除的旧文件，静默丢失数据。
+            if url == currentFileURL {
+                reopenWriteHandle()
+            }
             return true
         } catch {
             ErrorLogger.shared.log(
@@ -396,6 +408,19 @@ final class JSONLStore {
 
     private func appendRaw(_ line: String, to fileURL: URL) {
         let data = Data(("\n" + line).utf8)
+        if writeHandle == nil {
+            // Handle may have been closed (e.g. after atomic rewrite) or never opened.
+            // Attempt to reopen before writing so data is not silently lost.
+            writeHandle = try? FileHandle(forWritingTo: fileURL)
+            writeHandle?.seekToEndOfFile()
+            if writeHandle == nil {
+                ErrorLogger.shared.log(
+                    "appendRaw: writeHandle is nil and file cannot be opened: \(fileURL.lastPathComponent)",
+                    source: "JSONLStore"
+                )
+                return
+            }
+        }
         writeHandle?.write(data)
     }
 

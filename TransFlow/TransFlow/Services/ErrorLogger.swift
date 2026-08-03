@@ -32,7 +32,8 @@ final class ErrorLogger: Sendable {
     // 整个类的线程安全由内部串行 DispatchQueue 保证。
     private nonisolated init() {
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
         let logsDir = appSupport
             .appendingPathComponent(bundleID, isDirectory: true)

@@ -19,8 +19,24 @@ final class GlobalHotkeyManager {
     /// Action callbacks, set once from TransFlowApp.
     private var actions: [() -> Void] = Array(repeating: {}, count: 4)
 
-    /// Thread-safe binding cache read by the CGEvent callback.
-    nonisolated(unsafe) static var cachedBindings: [CachedBinding] = []
+    /// Thread-safe binding cache read by the CGEvent callback (runs on an arbitrary thread).
+    /// Protected by `bindingsLock` to prevent torn reads during concurrent writes.
+    private nonisolated(unsafe) static let bindingsLock = NSLock()
+    nonisolated(unsafe) private static var _cachedBindings: [CachedBinding] = []
+
+    /// Read cached bindings in a thread-safe manner (for the CGEvent callback).
+    nonisolated static func getCachedBindings() -> [CachedBinding] {
+        bindingsLock.lock()
+        defer { bindingsLock.unlock() }
+        return _cachedBindings
+    }
+
+    /// Write cached bindings in a thread-safe manner (from MainActor).
+    nonisolated static func setCachedBindings(_ bindings: [CachedBinding]) {
+        bindingsLock.lock()
+        _cachedBindings = bindings
+        bindingsLock.unlock()
+    }
 
     struct CachedBinding: Sendable {
         let keyCode: UInt16
@@ -53,10 +69,10 @@ final class GlobalHotkeyManager {
             (s.hotkeyToggleFloatingPreview, 2),
             (s.hotkeyToggleMainWindow, 3),
         ]
-        Self.cachedBindings = pairs.compactMap { b, i in
+        Self.setCachedBindings(pairs.compactMap { b, i in
             guard let kc = b.keyCode else { return nil }
             return CachedBinding(keyCode: kc, modifiers: b.modifiers, actionIndex: i)
-        }
+        })
     }
 
     func start() {
@@ -145,7 +161,7 @@ final class GlobalHotkeyManager {
                 let relevant: NSEvent.ModifierFlags = [.command, .option, .shift, .control]
                 let eventMods = mods.intersection(relevant)
 
-                for binding in GlobalHotkeyManager.cachedBindings {
+                for binding in GlobalHotkeyManager.getCachedBindings() {
                     let bMods = NSEvent.ModifierFlags(rawValue: binding.modifiers).intersection(relevant)
                     if keyCode == binding.keyCode && eventMods == bMods {
                         let idx = binding.actionIndex

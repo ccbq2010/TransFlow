@@ -542,25 +542,20 @@ final class TransFlowViewModel {
                 if enableDiarization {
                     do {
                         let diarizationModels = try await DiarizationModelManager.shared.loadModels()
-                        let diarizationService = try RealtimeDiarizationService()
-                        diarizationService.initialize(models: diarizationModels)
                         let knownSpeakers = SpeakerProfilesStore.shared.toFluidAudioSpeakers()
-                        if !knownSpeakers.isEmpty {
-                            diarizationService.setKnownSpeakers(knownSpeakers)
-                        }
-                        // P2-2 修复：通过 coordinator 管理 diarization 状态
-                        self.diarizationCoordinator.service = diarizationService
-                        self.diarizationCoordinator.activeSpeakerCount = 0
-
-                        try diarizationService.start { [weak self] segments in
-                            Task { @MainActor [weak self] in
+                        // 通过 coordinator 管理 diarization 完整生命周期
+                        try self.diarizationCoordinator.startSession(
+                            models: diarizationModels,
+                            knownSpeakers: knownSpeakers
+                        ) { [weak self] segments in
+                            Task { @MainActor in
                                 self?.handleDiarizationSegments(segments)
                             }
                         }
 
                         diarizationTask = Task {
                             for await chunk in diarizationStream {
-                                diarizationService.feedAudio(chunk.samples)
+                                self.diarizationCoordinator.feedAudio(chunk.samples)
                             }
                         }
                     } catch {
@@ -847,7 +842,7 @@ final class TransFlowViewModel {
             }
             tempHandle.closeFile()
 
-            try FileManager.default.replaceItem(at: fileURL, withItemAt: tempURL)
+            try FileManager.default.replaceItem(at: fileURL, withItemAt: tempURL, backupItemName: nil, resultingItemURL: nil)
 
             // P1-2 修复：原子替换后重新打开 writeHandle（旧 fd 指向旧 inode）
             jsonlStore.reopenWriteHandle()

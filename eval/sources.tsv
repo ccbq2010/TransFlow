@@ -1,0 +1,16 @@
+en_hello	en	Hello, this is a test of the transcription engine.
+en_weather	en	The weather in Shanghai is quite humid today.
+en_numbers	en	My phone number is five five two three eight nine zero one.
+en_tech	en	Please commit the code and run the build pipeline.
+en_quick	en	The quick brown fox jumps over the lazy dog.
+en_meeting	en	Let's schedule the meeting for next Tuesday at three pm.
+en_food	en	I would like a medium latte with oat milk please.
+en_quote	en	She said we need to optimize the latency of the model.
+zh_nihao	zh	你好，这是一个语音识别的测试。
+zh_tianqi	zh	今天上海的天气非常潮湿。
+zh_shuzi	zh	我的电话号码是五五二三八九零一。
+zh_daima	zh	请提交代码并运行构建流水线。
+zh_huiyi	zh	我们把会议安排在下周二下午三点。
+zh_kafei	zh	我想要一杯中杯的燕麦拿铁。
+zh_jishu	zh	我们需要优化模型的推理延迟。
+zh_yingwen	zh	The quick brown fox jumps over the lazy dog.
