@@ -29,6 +29,8 @@ final class TransFlowViewModel {
     var availableApps: [AppAudioTarget] = []
     /// Error message
     var errorMessage: String?
+    /// Non-fatal warning about the active input device (e.g. virtual default device).
+    var inputDeviceWarning: String?
     /// Whether to show the "model not ready" alert prompting user to go to Settings.
     var showModelNotReadyAlert: Bool = false
     /// Whether to show the WhisperKit model not ready alert.
@@ -479,6 +481,16 @@ final class TransFlowViewModel {
                         ErrorLogger.shared.log("Microphone permission not granted", source: "AudioCapture")
                         listeningState = .idle
                         return
+                    }
+                    // 用户未显式选择设备、且系统默认输入是虚拟/聚合设备时，
+                    // 提示可能录不到声音（不再自动切换设备，尊重用户对系统默认的选择）。
+                    if AppSettings.shared.selectedInputDeviceUID == nil,
+                       let defaultUID = InputDeviceManager.shared.systemDefaultUID,
+                       let defaultDevice = InputDeviceManager.shared.devices.first(where: { $0.uid == defaultUID }),
+                       defaultDevice.isVirtual {
+                        inputDeviceWarning = String(localized: "warning.virtual_input_device")
+                    } else {
+                        inputDeviceWarning = nil
                     }
                     let capture = audioCaptureService.startCapture(deviceUID: AppSettings.shared.selectedInputDeviceUID)
                     audioStream = capture.stream

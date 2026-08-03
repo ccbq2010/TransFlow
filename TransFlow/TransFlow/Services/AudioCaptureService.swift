@@ -61,38 +61,21 @@ final class AudioCaptureService: @unchecked Sendable {
         } else if let deviceUID, !deviceUID.isEmpty {
             NSLog("[AudioCapture] WARN: requested deviceUID=\(deviceUID) not found among current inputs; falling back to system default")
         } else {
-            // P0-A: No device UID specified (System Default).
-            // Check if the resolved default is a virtual/aggregate device (e.g. BlackHole,
-            // Loopback, CADefaultDeviceAggregate). These devices often capture silence
-            // when no app is routing audio to them, producing near-zero RMS → VAD strips
-            // everything → WhisperKit hallucinates on near-silent audio.
-            // If virtual, warn loudly and try to auto-fallback to the first real microphone.
+            // No device UID specified (System Default).
+            // If the resolved default is a virtual/aggregate device (e.g. BlackHole,
+            // Loopback, CADefaultDeviceAggregate), it may capture silence when no app
+            // is routing audio to it. Do NOT silently switch devices — the user may have
+            // intentionally chosen a virtual default (e.g. routing a call into BlackHole).
+            // Log a loud warning; the UI surfaces a non-fatal alert with guidance.
             let isVirtualDefault = Self.isVirtualDevice(deviceID: initialID)
             if isVirtualDefault {
                 ErrorLogger.shared.log(
                     "⚠️ System default input '\(initialName)' is a virtual/aggregate device — " +
-                    "may capture silence. Attempting auto-fallback to first real microphone.",
+                    "may capture silence. Recording continues on the system default; " +
+                    "select a real microphone in Settings if no sound is captured.",
                     source: "AudioCapture"
                 )
-                NSLog("[AudioCapture] ⚠️ System default '\(initialName)' is virtual — attempting auto-fallback")
-
-                // Find first non-virtual input device using CoreAudio directly
-                // (InputDeviceManager is @MainActor; cannot access from here).
-                let realMic = Self.findFirstRealMicrophone()
-                if let (realName, realUID, realID) = realMic {
-                    let bound = Self.bindInputDevice(deviceID: realID, on: engine)
-                    inputFormat = inputNode.outputFormat(forBus: 0)
-                    NSLog("[AudioCapture] auto-fallback: name=\(realName) uid=\(realUID) bound=\(bound)")
-                    ErrorLogger.shared.log(
-                        "Auto-fallback to '\(realName)' (uid=\(realUID), bound=\(bound))",
-                        source: "AudioCapture"
-                    )
-                } else {
-                    ErrorLogger.shared.log(
-                        "No non-virtual input device found — all available inputs are virtual. Audio capture will likely be silent.",
-                        source: "AudioCapture"
-                    )
-                }
+                NSLog("[AudioCapture] ⚠️ System default '\(initialName)' is virtual — continuing on system default (no auto-fallback)")
             }
         }
 
@@ -302,45 +285,6 @@ final class AudioCaptureService: @unchecked Sendable {
         }
 
         return (name, uid)
-    }
-
-    /// Find the first non-virtual input device by enumerating CoreAudio devices directly.
-    /// Returns (name, uid, deviceID) or nil if all inputs are virtual.
-    nonisolated private static func findFirstRealMicrophone() -> (name: String, uid: String, id: AudioDeviceID)? {
-        var addr = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size) == noErr,
-              size > 0 else { return nil }
-        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
-        var ids = [AudioDeviceID](repeating: 0, count: count)
-        _ = ids.withUnsafeMutableBytes { p in
-            AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, p.baseAddress!)
-        }
-        for id in ids {
-            // Skip virtual devices
-            if isVirtualDevice(deviceID: id) { continue }
-            // Check it has input channels
-            var scopeAddr = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyStreamConfiguration,
-                mScope: kAudioObjectPropertyScopeInput,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            var cfgSize: UInt32 = 0
-            guard AudioObjectGetPropertyDataSize(id, &scopeAddr, 0, nil, &cfgSize) == noErr, cfgSize > 0 else { continue }
-            let buf = UnsafeMutableRawPointer.allocate(byteCount: Int(cfgSize), alignment: 1)
-            defer { buf.deallocate() }
-            guard AudioObjectGetPropertyData(id, &scopeAddr, 0, nil, &cfgSize, buf) == noErr else { continue }
-            let list = buf.assumingMemoryBound(to: AudioBufferList.self).pointee
-            guard list.mNumberBuffers > 0 else { continue }
-            // Found a real input device
-            let (name, uid) = nameAndUID(forDeviceID: id)
-            return (name, uid, id)
-        }
-        return nil
     }
 
     /// Check if the given AudioDeviceID is a virtual/aggregate device (BlackHole, Loopback, etc.).

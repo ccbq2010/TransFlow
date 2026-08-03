@@ -5084,6 +5084,23 @@
         }
       }
     },
+    "warning.virtual_input_device" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System default input is a virtual/aggregate device and may capture silence. Choose a real microphone in Settings if no sound is detected."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认输入是虚拟/聚合设备，可能录不到声音。若没有声音，请在设置中选择真实麦克风。"
+          }
+        }
+      }
+    },
     "停止" : {
 
     },

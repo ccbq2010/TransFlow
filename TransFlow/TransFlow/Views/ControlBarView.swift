@@ -56,6 +56,14 @@ struct ControlBarView: View {
                     .foregroundStyle(.yellow)
                     .help(error)
             }
+
+            // Non-fatal input device warning (e.g. virtual default device)
+            if let warning = viewModel.inputDeviceWarning {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+                    .help(warning)
+            }
         }
     }
 
