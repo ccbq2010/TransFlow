@@ -223,20 +223,13 @@ final class AppSettings {
         self.liveEnableDiarization = UserDefaults.standard.object(forKey: "liveEnableDiarization") as? Bool ?? false
         self.hotwords = UserDefaults.standard.stringArray(forKey: "hotwords") ?? []
 
-        // P0-2 修复：迁移旧版 UserDefaults 中的 API Key 到 Keychain
-        KeychainHelper.migrateAPIKeyFromUserDefaults()
-
+        // API Key 随 cloudASR 配置 JSON 直接存 UserDefaults，不再使用 Keychain，
+        // 避免 macOS 对无 ACL 的 Keychain 条目反复弹出访问授权提示。
         if let data = UserDefaults.standard.data(forKey: "cloudASR"),
            let cfg = try? JSONDecoder().decode(CloudASRConfig.self, from: data) {
-            // apiKey 从 Keychain 读取，不信任 UserDefaults 中的值
-            var cfg = cfg
-            cfg.apiKey = KeychainHelper.loadAPIKey() ?? ""
             self.cloudASR = cfg
         } else {
-            // UserDefaults 无配置，仍尝试从 Keychain 恢复 apiKey
-            var cfg = CloudASRConfig.default
-            cfg.apiKey = KeychainHelper.loadAPIKey() ?? ""
-            self.cloudASR = cfg
+            self.cloudASR = CloudASRConfig.default
         }
 
         self.selectedInputDeviceUID = UserDefaults.standard.string(forKey: "selectedInputDeviceUID")
@@ -310,20 +303,7 @@ final class AppSettings {
     }
 
     private func saveCloudASR() {
-        // P0-2 修复：apiKey 单独存 Keychain，不随 JSON 存 UserDefaults
-        do {
-            try KeychainHelper.saveAPIKey(cloudASR.apiKey)
-        } catch {
-            ErrorLogger.shared.log(
-                "Failed to save API key to Keychain: \(error.localizedDescription)",
-                source: "AppSettings"
-            )
-        }
-
-        // 其余字段仍存 UserDefaults，但 apiKey 置空
-        var sanitized = cloudASR
-        sanitized.apiKey = ""
-        if let data = try? JSONEncoder().encode(sanitized) {
+        if let data = try? JSONEncoder().encode(cloudASR) {
             UserDefaults.standard.set(data, forKey: "cloudASR")
         }
     }
