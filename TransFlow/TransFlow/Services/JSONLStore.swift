@@ -23,27 +23,31 @@ final class JSONLStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    private var transcriptionsDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
-        return appSupport
-            .appendingPathComponent(bundleID, isDirectory: true)
-            .appendingPathComponent("transcriptions", isDirectory: true)
-    }
-
-    private var recordingsDirectory: URL {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
-        return appSupport
-            .appendingPathComponent(bundleID, isDirectory: true)
-            .appendingPathComponent("recordings", isDirectory: true)
-    }
+    private let transcriptionsDirectory: URL
+    private let recordingsDirectory: URL
 
     // MARK: - Initialization
 
-    init() {
+    /// - Parameter baseDirectory: Optional override for tests. When nil, files live
+    ///   under Application Support/`bundleID`. When set, `transcriptions/` and
+    ///   `recordings/` are created inside the given directory.
+    init(baseDirectory: URL? = nil) {
+        if let baseDirectory {
+            self.transcriptionsDirectory = baseDirectory
+                .appendingPathComponent("transcriptions", isDirectory: true)
+            self.recordingsDirectory = baseDirectory
+                .appendingPathComponent("recordings", isDirectory: true)
+        } else {
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.transflow"
+            self.transcriptionsDirectory = appSupport
+                .appendingPathComponent(bundleID, isDirectory: true)
+                .appendingPathComponent("transcriptions", isDirectory: true)
+            self.recordingsDirectory = appSupport
+                .appendingPathComponent(bundleID, isDirectory: true)
+                .appendingPathComponent("recordings", isDirectory: true)
+        }
         ensureDirectoryExists()
         // P1-3 修复：监听应用终止通知，确保 writeHandle 被正确关闭
         NotificationCenter.default.addObserver(
